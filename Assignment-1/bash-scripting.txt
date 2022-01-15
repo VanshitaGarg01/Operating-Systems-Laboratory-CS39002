@@ -1,0 +1,482 @@
+To make your script executable
+chmod +x script.sh
+
+shebang
+#! /usr/bin/bash
+
+Redirection to file
+echo "hello world" > file.txt
+
+To send whatever we type on the shell to a file
+cat > file.txt
+(Press Ctrl+D to exit)
+
+To append to the text in a file
+cat >> file.txt
+
+Comments
+# this is a single line comment
+
+:'
+comment line 1
+comment line 2'
+
+
+Conditional statements
+
+if-statement
+
+count=10
+if [ $count -eq 10 ]
+then
+    echo "condition is true"
+fi
+
+if-else-statement
+
+count=9
+if [ $count -eq 10 ]
+then
+    echo "condition is true"
+else
+    echo "condition is false" 
+fi
+
+Equal -eq
+Not equal -ne
+Greater than -gt
+
+We can also write
+
+count=10
+if (( $count > 9 ))
+then
+    echo "condition is true"
+else
+    echo "condition is false" 
+fi
+
+Note that 
+if(($count>9))
+This works
+
+if-else-if statements
+
+count=10
+if (( $count > 9 ))
+then
+    echo "condition is true"
+elif (( $count > 9 ))
+then
+    echo "another condition"
+else
+    echo "condition is false" 
+fi
+
+
+AND operator
+
+age=10
+if [ "$age" -gt 18] && ["$age" -lt 40]
+then
+    echo "Age is correct"
+else
+    echo "Age is not correct"
+fi
+
+We can also write this condition as
+if [[ "$age" -gt 18 && "$age" -lt 40 ]]
+
+We can also write
+if [ "$age" -gt 18 -a "$age" -lt 40 ]
+
+
+OR operator
+
+if [ "$age" -gt 18 -o "$age" -lt 40 ]
+
+This is eqiuivalent to
+if [[ "$age" -gt 18 || "$age" -lt 40 ]]
+
+We can also write
+if [ "$age" -gt 18] || ["$age" -lt 40]
+
+
+
+Loops
+
+while loop
+
+number=1
+while [ $number -lt 10 ]
+do  
+    echo "$number"
+    number=$((number+1))
+done
+
+We can also write this
+
+number=1
+while(($number<10))
+do  
+    echo $number
+    number=$((number+1))
+done
+
+
+until loop (runs until the statement becomes true)
+
+number=1
+until [ $number -ge 10 ]
+do  
+    echo "$number"
+    number=$((number+1))
+done
+
+
+for loop
+
+for i in 1 2 3 4 5
+do
+    echo $i
+done
+
+Better, we can write
+
+for i in {1..5}
+do
+    echo $i
+done
+
+We can provide a step size as follows
+
+for i in {0..20..2}
+do
+    echo $i
+done
+
+
+Another way to write a for loop is
+
+for((i=0;i<5;i++))
+do
+    echo $i
+done
+
+break statement
+
+for((i=0;i<=10;i++))
+do
+    if [ $i -gt 5 ]
+    then
+        break
+    echo $i
+done
+
+Similarly we can also use the continue statement
+
+
+Script input
+
+echo $1 $2 $3
+
+The script name itself is $0
+
+Array input
+
+args=("$@")     # array of any number of elements
+echo ${args[0]} ${args[1]} ${args[2]}
+echo $@     # all elements of the array
+
+echo $#     # length of the array
+
+
+Read from a file
+
+while read line
+do
+    echo $line
+done < "${1:-/dev/stdin}"
+
+
+Script output
+
+ls -al 1>file1.txt 2>file2.txt
+# this will send the standard output(1) to file1.txt and the standard error(2) to file2.txt
+
+ls -al > file.txt
+# only standard output will be redirected
+
+To use the same file for both use
+ls -al > file.txt 2>&1
+
+Or we can use
+ls -al >& file.txt
+
+
+String processing
+
+echo "Enter 1st string"
+read str1
+echo "Enter 2nd string"
+read str2
+if [ $str1 == $str2 ]
+then
+    echo "match"
+else
+    echo "no match"
+fi
+
+
+echo "Enter 1st string"
+read str1
+echo "Enter 2nd string"
+read str2
+if [ $str1 \< $str2 ]
+then
+    echo "str1 smaller"
+else
+    echo "str2 smaller"
+fi
+
+
+Concatenate two strings
+
+c=$str1$str2
+echo $c
+
+Case conversion
+
+echo "Enter 1st string"
+read str1
+
+echo ${str1,,}
+echo ${str1^^}
+
+
+Numbers and Arithmetic
+
+a=5
+b=4
+echo $((a+b))
+echo $((a-b))
+echo $((a*b))
+echo $((a/b))
+echo $((a%b))
+
+We can also write
+
+a=5
+b=4
+echo $(expr $a + $b)
+echo $(expr $a - $b)
+echo $(expr $a \* $b)
+echo $(expr $a / $b)
+echo $(expr $a % $b)
+
+Hexadecimal to decimal
+
+echo "Enter hex number"
+read hex
+echo -n "Decimal value of $hex is : "
+echo "obase=10; ibase=16; $hex" | bc
+
+
+Declare command
+
+declare myvar
+declare myvar=11
+
+
+Arrays
+
+arr=('aa' 'bb' 'cc')
+echo ${arr[@]}      # all elements of the array
+echo ${arr[0]}
+echo ${!arr[@]}     # indexes of the array
+echo ${#arr[@]}     # number of values in the array
+
+unset arr[2]        # delete element at index 2
+
+
+To change a value
+unset arr[2]
+arr[2]='ok'
+
+
+Functions
+
+function func()
+{
+    echo "This is a function"
+}
+
+func    # calling the function
+
+Functions with arguments
+
+function func()
+{
+    echo $1 $2
+}
+
+func hi bye
+
+
+Files and Directories
+
+The -p is added to prevent any error if we try to create the directory twice
+
+mkdir -p newdir
+
+To check if directory exists
+
+dir='directory to check'
+if [ -d "$dir" ]
+then
+    echo "$dir exists"
+else
+    echo "$dir does not exist"
+fi
+
+A file can be created using the touch command
+To check if a file exists similarly as above just use the -f flag
+
+
+To append to a file
+
+echo "Enter filename"
+read file
+
+if [ -f $file ]
+then
+    echo "Enter text"
+    read text
+    echo $text >> $file
+fi
+
+To read from a file
+
+echo "Enter filename"
+read file
+
+if [ -f $file ]
+then
+    while IFS = read -r line
+    do
+        echo $line
+    done < $file
+fi
+
+
+Using curl in scripts
+
+url="https://proof.ovh.net/files/1Mb.dat"
+curl ${url} -O
+
+or we can use
+
+url="https://proof.ovh.net/files/1Mb.dat"
+curl ${url} -o newfile
+
+or we can use
+
+url="https://proof.ovh.net/files/1Mb.dat"
+curl ${url} > outputfile
+
+To get the headers
+
+url="https://proof.ovh.net/files/1Mb.dat"
+curl -I ${url}
+
+
+The grep command
+
+echo "Enter filename"
+read file
+
+if [ -f $file ]
+then
+    echo "Enter text to search"
+    read text
+    grep $text $file
+fi
+
+flags that can be used with grep
+-i : removes the case sensitivity
+-n : also gives us the line numbers
+-c : gives us the count of matches
+-v : all lines without the word we gave as input
+
+
+The awk command
+
+file="newfile.txt"
+if [ -f $file ]
+then
+    awk '/linux/ {print}' $file     # print all lines with linux
+fi
+
+file="newfile.txt"
+if [ -f $file ]
+then
+    awk '{print}' $file
+fi
+
+file="newfile.txt"
+if [ -f $file ]
+then
+    awk '/Linux/ {print $4}' $file
+fi
+
+file="newfile.txt"
+if [ -f $file ]
+then
+    awk '/Linux/ {print $1, $4}' $file
+fi
+
+
+The sed command
+
+file="newfile.txt"
+if [ -f $file ]
+then
+    cat $file | sed 's/i/I/'    # replaces only the first i in each line with I
+fi
+
+file="newfile.txt"
+if [ -f $file ]
+then
+    cat $file | sed 's/i/I/g'   # replaces all i with I
+fi
+
+We can actually also write
+
+file="newfile.txt"
+if [ -f $file ]
+then
+    sed 's/i/I/g' $file
+fi
+
+To change the file itself, use
+
+file="newfile.txt"
+if [ -f $file ]
+then
+    sed -i 's/i/I/g' $file
+fi
+
+We can also replace words
+
+file="newfile.txt"
+if [ -f $file ]
+then
+    sed -i 's/Linux/Unix/g' $file
+fi
+
+
+Debugging bash scripts
+
+bash -x ./script.sh     # This shows step by step execution 
+
+We can also write set -x and set +x to start and stop debugging respectively

@@ -1,0 +1,4 @@
+*.zip
+**/.vscode/*
+a.out
+*.o
