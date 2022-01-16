@@ -1,4 +1,10 @@
 *.zip
-**/.vscode/*
+.vscode/
 a.out
 *.o
+data1c/
+data1d/
+1.b.files/
+*.tar.gz
+file_mod/
+*.txt
