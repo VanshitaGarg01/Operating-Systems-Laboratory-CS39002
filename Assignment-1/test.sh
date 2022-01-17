@@ -1,2 +1,3 @@
-cat $file|sort -n>1.b.files.out/${file##*/}
-cat 1.b.files.out/${file##*/}>>ff.txt
+file="test.txt"
+
+awk '$'$1'~/*/' $file
