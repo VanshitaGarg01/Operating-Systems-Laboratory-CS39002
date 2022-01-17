@@ -1,5 +1,5 @@
 n=$1
-for((i=2;i*i<=n;i++))
+for((i=2;i<=n;i++))
 do
     while(($n%$i==0))
     do
@@ -7,8 +7,4 @@ do
         n=$(($n/$i))
     done
 done
-if(($n>1))
-then
-    arr+=($n)
-fi
 echo ${arr[@]}
