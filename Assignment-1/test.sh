@@ -1,2 +1,2 @@
-file="test.txt"
-sed = $file|sed 'N;s/[\n ]/,/g
+cat $file|sort -n>1.b.files.out/${file##*/}
+cat 1.b.files.out/${file##*/}>>ff.txt
