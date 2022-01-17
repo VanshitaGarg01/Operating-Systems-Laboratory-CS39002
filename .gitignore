@@ -8,3 +8,6 @@ data1d/
 *.tar.gz
 file_mod/
 *.txt
+*.json
+*.html
+*.freq

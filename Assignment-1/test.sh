@@ -1,2 +1,2 @@
 file="test.txt"
-awk 'NR{$0=++a " " $0};{gsub(/[[:blank:]]/,",")};{print}' $file
+sed = $file|sed 'N;s/[\n ]/,/g
