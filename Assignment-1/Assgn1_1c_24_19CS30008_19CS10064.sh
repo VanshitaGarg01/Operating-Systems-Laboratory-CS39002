@@ -1,5 +1,5 @@
-dir="data1cnew"
-mkdir -p $dir
+dir="1cnew"
+# mkdir -p $dir
 # ext=""
 
 c=0
@@ -8,10 +8,10 @@ do
     # name=$(basename $file)
     # [[ ext=${name##*.} && $ext == $name ]] && ext="Nil"
 
-    ext=${name##*.}
-    [[ $ext == $name ]] && ext="Nil"
+    # ext=${name##*.}
+    # [[ $ext == $name ]] && ext="Nil"
     # arr+=($ext)
-    # c=$((c+1))
+    c=$((c+1))
 
     # if [ $name == $ext ]
     # then
@@ -21,7 +21,7 @@ do
 
     # mkdir -p $dir/$ext
     # cp $file $dir/$ext/$name
-    cp $file $dir/$name
+    # cp $file $dir/$name
 done
 
 echo $c

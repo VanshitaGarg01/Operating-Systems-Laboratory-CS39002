@@ -17,5 +17,5 @@ REQ_HEADERS="Accept,Host,User-Agent"
 # for file in JSONData/*
 # do
 #     val=$(curl -d "json=`cat $file`" http://validate.jsontest.com/|jq .validate)
-#     [[ $val == "true" ]]&&echo ${file##*/}>>valid.txt||echo ${file##*/}>>invalid.txt
+#     ((${#val}==4))&&echo ${file##*/}>>valid.txt||echo ${file##*/}>>invalid.txt
 # done

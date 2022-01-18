@@ -3,9 +3,11 @@
 a.out
 *.o
 data1c/
+1c/
 data1d/
 1.b.files/
 *.tar.gz
+*.tar.xz
 file_mod/
 *.txt
 *.json
