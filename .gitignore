@@ -4,6 +4,7 @@ a.out
 *.o
 data1c/
 1c/
+Data_mini/
 data1d/
 1.b.files/
 *.tar.gz

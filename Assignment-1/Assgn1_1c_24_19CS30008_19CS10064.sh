@@ -1,28 +1,11 @@
-dir="1cnew"
-# mkdir -p $dir
-# ext=""
-
-c=0
-for file in $(find data1c/ -mindepth 1 -type f)
+IFS=$'\n'
+arr=($(find Data_mini/ -type f -name "*.*" | awk -F. '{print $NF}' | sort -u))
+echo ${arr[@]}
+for ext in ${arr[@]}
 do
-    # name=$(basename $file)
-    # [[ ext=${name##*.} && $ext == $name ]] && ext="Nil"
-
-    # ext=${name##*.}
-    # [[ $ext == $name ]] && ext="Nil"
-    # arr+=($ext)
-    c=$((c+1))
-
-    # if [ $name == $ext ]
-    # then
-    #     ext="Nil"
-    # fi
-    # echo $ext
-
-    # mkdir -p $dir/$ext
-    # cp $file $dir/$ext/$name
-    # cp $file $dir/$name
+    echo $ext
+    mkdir -p 1cout/$ext
+    find Data_mini/ -type f -name "*.$ext" -exec mv -t ./1cout/"$ext" {} +
 done
-
-echo $c
-# echo ${#arr[@]}
+mkdir -p 1cout/Nil
+find Data_mini/ -type f -exec mv -t ./1cout/Nil {} +
