@@ -1,1 +1,1 @@
-mkdir 1.b.files.out;f=(1.b.files/*);for((i=0;i<${#f[@]};i++));do cat ${f[i]}|sort -n>1.b.files.out/${f[i]##*/}>>ff.txt;done;sort -n ff.txt|uniq -c|awk '{print $2,$1}'>1.b.out.txt
+mkdir 1.b.files.out;f=(1.b.files/*);for((i=0;i<${#f[@]};i++));do cat ${f[i]}|sort -n>1.b.files.out/${f[i]##*/}>>ff.txt;done;s=" ";ln="sort${s}-n${s}ff.txt|uniq${s}-c|awk${s}'{print${s}\$2,\$1}'>1.b.out.txt";eval $ln;

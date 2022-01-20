@@ -7,6 +7,8 @@ data1c/
 Data_mini/
 data1d/
 1.b.files/
+1.b.files.out/
+ms/
 *.tar.gz
 *.tar.xz
 file_mod/

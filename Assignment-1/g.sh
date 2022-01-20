@@ -1,1 +1,1 @@
-echo "Filename(1st-line),Column(2nd-line),Regexp(3rd-line)";read file;read c;read r;for((i=1;i<=150*10;i++));do ((i%10==0))&&printf "$RANDOM\n">>$file||printf "$RANDOM,">>$file;done;awk 'BEGIN{FS=","}$'$c'~/'$r'/{c++}END{print(c>0)?"YES":"NO"}' $file
+>$1;for((i=1;i<=150*10;i++));do ((i%10==0))&&printf "$RANDOM\n">>$1||printf "$RANDOM,">>$1;done;awk 'BEGIN{FS=","}$'$2'~/'$3'/{c++}END{print(c>0)?"YES":"NO"}' $1
