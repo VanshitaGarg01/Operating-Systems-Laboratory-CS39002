@@ -7,8 +7,6 @@
 #include <unistd.h>
 
 int main() {
-    // perform bootup tasks, like loading history into deque
-
     // add signal handlers
     struct sigaction action;
     action.sa_handler = SIG_IGN;
@@ -24,14 +22,28 @@ int main() {
 
     // char* args[] = {"echo", NULL};
     if (fork() == 0) {
-        char* args[] = {"cat", "temp.txt", NULL};
+        char* args[] = {"./a.out", NULL};
+        // setpgrp();
+        signal(SIGINT, SIG_DFL);
         execvp(args[0], args);
         perror("execvp");
         exit(1);
+    } else {
+        while (1) {
+            printf("hi\n");
+        }
     }
-    // else {
-    //     while(1) {
-    //         printf("bye\n");
-    //     }
-    // }
+
+    int i, in_fd = 0;
+    int pipeError = 0;
+    int FD[2];  //store the read and write file descripters
+    for (i = 0; i < pipeProcesses - 1; i++) {
+        pipe(FD);
+        args = splitCommand(pipeCommands[i], &noOfTokens);
+        status = shellExecute(args, noOfTokens, in_fd, FD[1]);
+        close(FD[1]);
+        in_fd = FD[0];
+    }
+    args = splitCommand(pipeCommands[i], &noOfTokens);
+    status = shellExecute(args, noOfTokens, in_fd, 1);
 }

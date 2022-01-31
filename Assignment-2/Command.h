@@ -1,6 +1,8 @@
 #ifndef __COMMAND_H
 #define __COMMAND_H
 
+#include <fcntl.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include <string>
@@ -36,7 +38,26 @@ class Command {
     }
 
     void io_redirect() {
-        
+        if (input_file != "") {
+            fd_in = open(input_file.c_str(), O_RDONLY);
+            if (fd_in < 0) {
+                perror("open");
+                exit(1);
+            }
+        }
+        int ret = dup2(fd_in, STDIN_FILENO);
+        if (ret < 0) {
+            perror("dup2");
+            exit(1);
+        }
+
+        if (output_file != "") {
+            fd_out = open(output_file.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (fd_out < 0) {
+                perror("open");
+                exit(1);
+            }
+        }
     }
 };
 
