@@ -58,6 +58,11 @@ class Command {
                 exit(1);
             }
         }
+        ret = dup2(fd_out, STDOUT_FILENO);
+        if (ret < 0) {
+            perror("dup2");
+            exit(1);
+        }
     }
 };
 
