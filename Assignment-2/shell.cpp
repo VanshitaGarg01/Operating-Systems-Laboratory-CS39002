@@ -4,17 +4,16 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include <iostream>
+#include <deque>
 #include <map>
-#include <vector>
 
-#include "Command.h"
-#include "read_command.h"
-#include "utility.h"
+#include "header.h"
 
 using namespace std;
 
 static pid_t fgpid = 0;
+
+deque<string> history;
 
 vector<Pipeline*> all_pipelines;
 map<pid_t, int> ind;
@@ -30,12 +29,13 @@ bool shellCd(string arg) {
 }
 
 bool shellExit(string arg = "") {
+    updateHistory();
     exit(0);
     return true;
 }
 
 bool shellJobs(string arg = "") {
-    for (int i = 0; i < all_pipelines.size(); i++) {
+    for (int i = 0; i < (int)all_pipelines.size(); i++) {
         cout << "pgid: " << all_pipelines[i]->pgid << ": ";
         int status = all_pipelines[i]->status;
         if (status == RUNNING) {
@@ -48,7 +48,7 @@ bool shellJobs(string arg = "") {
         cout << endl;
 
         vector<Command*> cmds = all_pipelines[i]->cmds;
-        for (int j = 0; j < cmds.size(); j++) {
+        for (int j = 0; j < (int)cmds.size(); j++) {
             cout << "--- pid: " << cmds[j]->pid << " " << cmds[j]->cmd << endl;
         }
     }
@@ -60,7 +60,7 @@ bool (*builtin_funcs[])(string args) = {&shellCd, &shellExit, &shellJobs};
 
 bool handleBuiltin(Pipeline& p) {
     string cmd = p.cmds[0]->args[0];
-    for (int i = 0; i < builtins.size(); i++) {
+    for (int i = 0; i < (int)builtins.size(); i++) {
         if (cmd == builtins[i]) {
             string arg = (p.cmds[0]->args.size() > 1) ? p.cmds[0]->args[1] : "";
             return (*builtin_funcs[i])(arg);
@@ -174,10 +174,15 @@ void executePipeline(Pipeline& p) {
                 close(new_pipe[1]);
             }
 
-            vector<char*> c_args = cstrArray(p.cmds[i]->args);
-            execvp(c_args[0], c_args.data());
-            perror("execvp");
-            exit(1);
+            if (p.cmds[i]->args[0] == "history") {
+                printHistory();
+                exit(0);
+            } else {
+                vector<char*> c_args = cstrArray(p.cmds[i]->args);
+                execvp(c_args[0], c_args.data());
+                perror("execvp");
+                exit(1);
+            }
 
         } else {  // parent shell
             p.cmds[i]->pid = cpid;
@@ -229,8 +234,9 @@ void executePipeline(Pipeline& p) {
 
 int main() {
     // perform bootup tasks, like loading history into deque
+    loadHistory();
 
-    pid_t shid = getpid();
+    // pid_t shid = getpid();
 
     // add signal handlers
     struct sigaction action;
@@ -246,7 +252,16 @@ int main() {
     signal(SIGCHLD, reapProcesses);
 
     while (!cin.eof()) {
-        Pipeline* p = getCommand();
+        displayPrompt();
+
+        string cmd = readCommand();
+        if (cmd == "") {
+            continue;
+        }
+        // need to add command to history
+        addToHistory(cmd);
+
+        Pipeline* p = getCommand(cmd);
         if (p->num_active == -1) {
             cout << "Error while parsing command" << endl;
             continue;
@@ -284,6 +299,8 @@ int main() {
         // 0 to last - 1 should output to stdout
         // doubtful : ls > temp.txt | sort -r
     }
+
+    updateHistory();
 }
 
 /*

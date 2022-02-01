@@ -6,44 +6,21 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#define COLOR_RED "\033[1;31m"
+#define COLOR_GREEN "\033[1;32m"
+#define COLOR_YELLOW "\033[1;33m"
+#define COLOR_BLUE "\033[1;34m"
+#define COLOR_MAGENTA "\033[1;35m"
+#define COLOR_CYAN "\033[1;36m"
+#define COLOR_RESET "\033[0m"
+
+#define ERROR(msg, ...) printf(COLOR_RED "[ERROR] " msg COLOR_RESET "\n", ##__VA_ARGS__);
+#define SUCCESS(msg, ...) printf(COLOR_CYAN "[INFO] " msg COLOR_RESET "\n", ##__VA_ARGS__);
+#define DEBUG(msg, ...) printf(COLOR_BLUE "[DEBUG] " msg COLOR_RESET "\n", ##__VA_ARGS__);
+#define LOG(msg, ...) printf(COLOR_BLUE "[LOG] " msg COLOR_RESET "\n", ##__VA_ARGS__);
+#define PROMPT(msg, ...) printf(COLOR_GREEN msg COLOR_RESET  "\n", ##__VA_ARGS__);
+
+
 int main() {
-    // add signal handlers
-    struct sigaction action;
-    action.sa_handler = SIG_IGN;
-    sigemptyset(&action.sa_mask);
-    action.sa_flags = 0;
-
-    sigaction(SIGINT, &action, NULL);
-    // sigaction(SIGTSTP, &action, NULL);
-
-    // while (!cin.eof()) {
-
-    // }
-
-    // char* args[] = {"echo", NULL};
-    if (fork() == 0) {
-        char* args[] = {"./a.out", NULL};
-        // setpgrp();
-        signal(SIGINT, SIG_DFL);
-        execvp(args[0], args);
-        perror("execvp");
-        exit(1);
-    } else {
-        while (1) {
-            printf("hi\n");
-        }
-    }
-
-    int i, in_fd = 0;
-    int pipeError = 0;
-    int FD[2];  //store the read and write file descripters
-    for (i = 0; i < pipeProcesses - 1; i++) {
-        pipe(FD);
-        args = splitCommand(pipeCommands[i], &noOfTokens);
-        status = shellExecute(args, noOfTokens, in_fd, FD[1]);
-        close(FD[1]);
-        in_fd = FD[0];
-    }
-    args = splitCommand(pipeCommands[i], &noOfTokens);
-    status = shellExecute(args, noOfTokens, in_fd, 1);
+    PROMPT("hi");
 }
