@@ -12,7 +12,7 @@
 using namespace std;
 
 bool ctrlC = 0, ctrlZ = 0, ctrlD = 0;
-static pid_t fgpid = 0;
+pid_t fgpid = 0;
 
 deque<string> history;
 vector<Pipeline*> all_pipelines;
@@ -67,174 +67,6 @@ bool handleBuiltin(Pipeline& p) {
         }
     }
     return false;
-}
-
-// https://web.stanford.edu/class/archive/cs/cs110/cs110.1206/lectures/07-races-and-deadlock-slides.pdf
-static void reapProcesses(int sig) {
-    while (true) {
-        int status;
-        pid_t pid = waitpid(-1, &status, WNOHANG | WUNTRACED | WCONTINUED);
-        if (pid <= 0) {
-            break;
-        }
-        int id = ind[pid];
-        // if (pid == fgpid) fgpid = 0;  // clear foreground process
-        if (WIFSIGNALED(status) || WIFEXITED(status)) {
-            all_pipelines[id]->status = DONE;
-        } else if (WIFSTOPPED(status)) {
-            all_pipelines[id]->status = STOPPED;
-        } else if (WIFCONTINUED(status)) {
-            all_pipelines[id]->status = RUNNING;
-            all_pipelines[id]->num_active = all_pipelines[id]->cmds.size();
-        }
-
-        if (all_pipelines[id]->pgid == fgpid && !WIFCONTINUED(status)) {
-            all_pipelines[id]->num_active--;
-            if (all_pipelines[id]->num_active == 0) {
-                fgpid = 0;
-            }
-        }
-    }
-}
-
-static void toggleSIGCHLDBlock(int how) {
-    sigset_t mask;
-    sigemptyset(&mask);
-    sigaddset(&mask, SIGCHLD);
-    sigprocmask(how, &mask, NULL);
-}
-
-void blockSIGCHLD() {
-    toggleSIGCHLDBlock(SIG_BLOCK);
-}
-
-void unblockSIGCHLD() {
-    toggleSIGCHLDBlock(SIG_UNBLOCK);
-}
-
-static void waitForForegroundProcess(pid_t pid) {
-    fgpid = pid;
-    sigset_t empty;
-
-    sigemptyset(&empty);
-    while (fgpid == pid) {
-        sigsuspend(&empty);
-    }
-    unblockSIGCHLD();
-}
-
-static void CZ_handler(int signum) {
-    // cin.setstate(ios::badbit);
-    if (signum == SIGINT) {
-        ctrlC = 1;
-    } else if (signum == SIGTSTP) {
-        ctrlZ = 1;
-    }
-}
-
-void executePipeline(Pipeline& p, bool isMulti = false) {
-    // need to set p.pgid to the pid of the first process in the pipeline
-
-    pid_t fg_pgid = 0;
-    int new_pipe[2], old_pipe[2];
-
-    blockSIGCHLD();
-
-    int cmds_size = p.cmds.size();
-    for (int i = 0; i < cmds_size; i++) {
-        if (i + 1 < cmds_size) {
-            int ret = pipe(new_pipe);
-            if (ret < 0) {
-                perror("pipe");
-                exit(1);
-            }
-        }
-        pid_t cpid = fork();
-        if (cpid < 0) {
-            perror("fork");
-            exit(1);
-        }
-        if (cpid == 0) {  // child
-            unblockSIGCHLD();
-            // revert signal handlers to default behaviour
-            signal(SIGINT, SIG_DFL);
-            signal(SIGTSTP, SIG_DFL);
-
-            // if (i == 0 || i + 1 == cmds_size) {
-            p.cmds[i]->io_redirect();
-            // }
-
-            if (i == 0) {
-                setpgrp();
-            } else {
-                setpgid(0, fg_pgid);
-                dup2(old_pipe[0], p.cmds[i]->fd_in);  // input piping
-                close(old_pipe[0]);
-                close(old_pipe[1]);
-            }
-
-            if (i < cmds_size) {
-                dup2(new_pipe[1], p.cmds[i]->fd_out);  // output piping
-                close(new_pipe[0]);
-                close(new_pipe[1]);
-            }
-
-            if (p.cmds[i]->args[0] == "history") {
-                printHistory();
-                exit(0);
-            } else {
-                vector<char*> c_args = cstrArray(p.cmds[i]->args);
-                execvp(c_args[0], c_args.data());
-                perror("execvp");
-                exit(1);
-            }
-
-        } else {  // parent shell
-            p.cmds[i]->pid = cpid;
-
-            if (i == 0) {
-                fg_pgid = cpid;
-                p.pgid = cpid;
-
-                // cout << cpid << endl;
-
-                setpgid(cpid, fg_pgid);
-                all_pipelines.push_back(&p);
-
-                // cout << p << endl;
-
-                // https://web.archive.org/web/20170701052127/https://www.usna.edu/Users/cs/aviv/classes/ic221/s16/lab/10/lab.html
-                tcsetpgrp(STDIN_FILENO, fg_pgid);
-            } else {
-                setpgid(cpid, fg_pgid);
-            }
-
-            if (i > 0) {
-                close(old_pipe[0]);
-                close(old_pipe[1]);
-            }
-            old_pipe[0] = new_pipe[0];
-            old_pipe[1] = new_pipe[1];
-
-            // extra handling
-            ind[cpid] = (int)all_pipelines.size() - 1;
-        }
-    }
-
-    if (p.cmds.back()->is_bg) {
-        unblockSIGCHLD();
-    } else {
-        waitForForegroundProcess(fg_pgid);
-        if (all_pipelines.back()->status == STOPPED) {
-            kill(-fg_pgid, SIGCONT);
-        }
-    }
-    tcsetpgrp(STDIN_FILENO, getpid());
-
-    // for(auto it : all_pipelines) {
-    //     cout << *it << endl;
-    // }
-    // cout << *all_pipelines.back() << endl;
 }
 
 int main() {
@@ -301,7 +133,7 @@ int main() {
             continue;
         }
 
-        executePipeline(*p);
+        p->executePipeline();
 
         // add exit
         // add builtins

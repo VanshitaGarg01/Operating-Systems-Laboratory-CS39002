@@ -1,6 +1,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include <map>
+
 #include "header.h"
 using namespace std;
 
@@ -139,17 +141,5 @@ ostream& operator<<(ostream& os, const Command& cmd) {
     cout << "fd_in: " << cmd.fd_in << " fd_out: " << cmd.fd_out << endl;
     cout << "file in: " << cmd.input_file << " file out: " << cmd.output_file << endl;
     cout << "is_bg: " << cmd.is_bg << endl;
-    return os;
-}
-
-Pipeline::Pipeline(int num_p) : num_active(num_p), status(RUNNING) {}
-
-Pipeline::Pipeline(vector<Command*>& cmds) : cmds(cmds), pgid(0), num_active(cmds.size()), status(RUNNING) {}
-
-ostream& operator<<(ostream& os, const Pipeline& p) {
-    cout << p.pgid << endl;
-    for (auto it : p.cmds) {
-        os << *it << endl;
-    }
     return os;
 }

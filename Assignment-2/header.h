@@ -49,6 +49,7 @@ class Command {
     friend ostream& operator<<(ostream& os, const Command& cmd);
 };
 
+/* Pipeline.cpp */
 class Pipeline {
    public:
     vector<Command*> cmds;
@@ -58,6 +59,7 @@ class Pipeline {
 
     Pipeline(int num_p);
     Pipeline(vector<Command*>& cmds);
+    pid_t executePipeline(bool isMultiwatch = false);
     friend ostream& operator<<(ostream& os, const Pipeline& p);
 };
 
@@ -80,6 +82,14 @@ void updateHistory();
 /* autocomplete.cpp */
 vector<string> getFilesInCurrDir();
 vector<string> autocomplete(string s);
+
+/* signal_handlers.cpp */
+void reapProcesses(int sig);
+void toggleSIGCHLDBlock(int how);
+void blockSIGCHLD();
+void unblockSIGCHLD();
+void waitForForegroundProcess(pid_t pid);
+void CZ_handler(int signum);
 
 /* shell.cpp */
 

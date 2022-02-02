@@ -29,6 +29,7 @@ vector<string> getFilesInCurrDir() {
     return files;
 }
 
+// check algo once
 vector<string> autocomplete(string s) {
     vector<string> filenames = getFilesInCurrDir();
     vector<string> matched;
