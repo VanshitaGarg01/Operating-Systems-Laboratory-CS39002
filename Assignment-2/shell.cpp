@@ -11,10 +11,10 @@
 
 using namespace std;
 
+bool ctrlC = 0, ctrlZ = 0, ctrlD = 0;
 static pid_t fgpid = 0;
 
 deque<string> history;
-
 vector<Pipeline*> all_pipelines;
 map<pid_t, int> ind;
 
@@ -123,11 +123,16 @@ static void waitForForegroundProcess(pid_t pid) {
     unblockSIGCHLD();
 }
 
-static void CZ_handler(int sig) {
-    cin.setstate(ios::badbit);
+static void CZ_handler(int signum) {
+    // cin.setstate(ios::badbit);
+    if (signum == SIGINT) {
+        ctrlC = 1;
+    } else if (signum == SIGTSTP) {
+        ctrlZ = 1;
+    }
 }
 
-void executePipeline(Pipeline& p) {
+void executePipeline(Pipeline& p, bool isMulti = false) {
     // need to set p.pgid to the pid of the first process in the pipeline
 
     pid_t fg_pgid = 0;
@@ -155,9 +160,9 @@ void executePipeline(Pipeline& p) {
             signal(SIGINT, SIG_DFL);
             signal(SIGTSTP, SIG_DFL);
 
-            if (i == 0 || i + 1 == cmds_size) {
-                p.cmds[i]->io_redirect();
-            }
+            // if (i == 0 || i + 1 == cmds_size) {
+            p.cmds[i]->io_redirect();
+            // }
 
             if (i == 0) {
                 setpgrp();
@@ -240,7 +245,7 @@ int main() {
 
     // add signal handlers
     struct sigaction action;
-    action.sa_handler = CZ_handler;
+    action.sa_handler = CZ_handler;  // SIG_IGN willignore the interrupt and getchar will be blocked
     sigemptyset(&action.sa_mask);
     action.sa_flags = 0;
 
@@ -251,7 +256,7 @@ int main() {
     // https://web.archive.org/web/20170701052127/https://www.usna.edu/Users/cs/aviv/classes/ic221/s16/lab/10/lab.html
     signal(SIGCHLD, reapProcesses);
 
-    while (!cin.eof()) {
+    while (!ctrlD) {  // add global variable
         displayPrompt();
 
         string cmd = readCommand();
@@ -261,12 +266,18 @@ int main() {
         // need to add command to history
         addToHistory(cmd);
 
+        // cout << cmd << endl;
+
         Pipeline* p = getCommand(cmd);
         if (p->num_active == -1) {
             cout << "Error while parsing command" << endl;
             continue;
         }
-        if (p->cmds.size() == 0) {
+
+        if (p->cmds[0]->args.size() == 0) {
+            if (cmd.size() > 0) {
+                cout << "Invalid command" << endl;
+            }
             continue;
         }
 

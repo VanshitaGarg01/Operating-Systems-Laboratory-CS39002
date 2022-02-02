@@ -33,8 +33,8 @@ vector<string> autocomplete(string s) {
     vector<string> filenames = getFilesInCurrDir();
     vector<string> matched;
     int s_len = s.length();
-    for (int i = 0; i < filenames.size(); i++) {
-        if (filenames[i].length() < s_len) {
+    for (int i = 0; i < (int)filenames.size(); i++) {
+        if ((int)filenames[i].length() < s_len) {
             continue;
         } else if (s == filenames[i].substr(0, s_len)) {
             matched.push_back(filenames[i]);
@@ -46,7 +46,7 @@ vector<string> autocomplete(string s) {
         sort(matched.begin(), matched.end());
         int i = 0;
         s = "";
-        while (i < min(matched[0].size(), matched.back().size()) && matched[0][i] == matched.back()[i]) {
+        while (i < (int)min(matched[0].size(), matched.back().size()) && matched[0][i] == matched.back()[i]) {
             s += matched[0][i++];
         }
     }
