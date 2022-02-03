@@ -1,6 +1,7 @@
 #ifndef __HEADER_H
 #define __HEADER_H
 
+#include <exception>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -38,6 +39,17 @@ using namespace std;
 #define TAB 9
 #define ENTER 10
 
+#define BUF_SIZE 1024
+
+class ShellException : public exception {
+   protected:
+    const string message;
+
+   public:
+    ShellException(const string&);
+    virtual const char* what() const throw();
+};
+
 /* Command.cpp */
 class Command {
    public:
@@ -59,25 +71,28 @@ class Command {
 /* Pipeline.cpp */
 class Pipeline {
    public:
+    string cmd;
     vector<Command*> cmds;
     pid_t pgid;
     int num_active;
     int status;
 
+    Pipeline(string& cmd);
     Pipeline(int num_p);
     Pipeline(vector<Command*>& cmds);
+    void parse();
     void executePipeline(bool isMultiwatch = false);
     friend ostream& operator<<(ostream& os, const Pipeline& p);
 };
 
 /* utility.cpp */
+void trim(string& s);
 vector<string> split(string& str, char delim);
 vector<char*> cstrArray(vector<string>& args);
 
 /* read_command.cpp */
 void displayPrompt();
 string readCommand();
-Pipeline* getCommand(string cmd);
 
 /* history.cpp */
 void loadHistory();
@@ -91,14 +106,17 @@ vector<string> getFilesInCurrDir();
 vector<string> autocomplete(string s);
 
 /* signal_handlers.cpp */
-void reapProcesses(int sig);
+void reapProcesses(int signum);
 void toggleSIGCHLDBlock(int how);
 void blockSIGCHLD();
 void unblockSIGCHLD();
 void waitForForegroundProcess(pid_t pid);
 void CZ_handler(int signum);
+void multiWatch_SIGINT(int signum);
 
-/* multiwatch.cpp */
+/* multiWatch.cpp */
+vector<Pipeline*> parseMultiWatch(string cmd, string& output_file);
+void executeMultiWatch(vector<Pipeline*>& pList, string output_file = "");
 
 /* shell.cpp */
 

@@ -5,6 +5,8 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <bits/stdc++.h>
+using namespace std;
 
 #define COLOR_RED "\033[1;31m"
 #define COLOR_GREEN "\033[1;32m"
@@ -22,5 +24,6 @@
 
 
 int main() {
-    SUCCESS("Hello World!");
+    string s;
+    cin >> s;
 }

@@ -98,9 +98,45 @@ int main() {
         // need to add command to history
         addToHistory(cmd);
 
+        string output_file = "";
+        vector<Pipeline*> pList = parseMultiWatch(cmd, output_file);
+
+        // cout << pList.size() << endl;
+        // cout << output_file << endl;
+        // for (auto& p : pList) {
+        //     if (p != NULL) {
+        //         cout << *p << endl;
+        //     }
+        // }
+        // if (pList.size() == 1 && pList[0] == NULL) {
+        //     DEBUG("here");
+        //     continue;
+        // }
+        // continue;
+
+        // if (pList.size() == 1 && pList[0] == NULL) {
+        //     // DEBUG("here");
+        //     cout << "Error while parsing command" << endl;
+        //     continue;
+        // } else 
+        if (pList.size() > 0 && pList[0] != NULL) {
+            struct sigaction multiWatch_action;
+            multiWatch_action.sa_handler = multiWatch_SIGINT;
+            sigemptyset(&multiWatch_action.sa_mask);
+            multiWatch_action.sa_flags = 0;
+            sigaction(SIGINT, &multiWatch_action, NULL);
+
+            executeMultiWatch(pList, output_file);
+
+            // revert back
+            sigaction(SIGINT, &action, NULL);
+            continue;
+        }
+
         // cout << cmd << endl;
 
-        Pipeline* p = getCommand(cmd);
+        Pipeline* p = new Pipeline(cmd);
+        p->parse();
         if (p->num_active == -1) {
             cout << "Error while parsing command" << endl;
             continue;
@@ -113,7 +149,8 @@ int main() {
             continue;
         }
 
-        // cout << p << endl;
+        // cout << *p << endl;
+        // continue;
 
         string arg = p->cmds[0]->args[0];
         if (arg == "cd" || arg == "exit" || arg == "jobs") {
@@ -131,6 +168,8 @@ int main() {
 }
 
 /*
-pgid -> wd
-wd -> readfd
+todo: 
+ctrl + R
+remove tmp files
+exception handling
 */

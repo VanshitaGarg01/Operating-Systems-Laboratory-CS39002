@@ -70,13 +70,47 @@ string readCommand() {
         int ret_in, ret_out;
         c = getchar();
         if (c == CTRL_R) {  // ctrl + r
-        
-            // history search
             printf("\n");
-            
+            printf("Enter search term: "); // should i print buf here?
+            string s; // = buf;
+            while (1) {
+                char ch = getchar();
+                ret_in = handleChar(ch, s);
+                if (ret_in != 0) {
+                    break;
+                }
+            }
+            if (ret_in == 4) {  // ctrl + D
+                ctrlD = 0;
+                buf = "";
+                break;
+            } else if (ret_in == 2) {  // ctrl + C
+                buf = "";
+                break;
+            }
+
+            vector<string> cmds = searchInHistory(s);
+            if (cmds.size() == 0) {
+                printf("No match for search term in history\n");
+                displayPrompt();
+                // should s reappear in the prompt?
+            } else if (cmds.size() == 1) {
+                printf("Exact match found\n");
+                displayPrompt();
+                buf = cmds[0];
+                printf("%s", buf.c_str());
+            } else {
+                printf("Similar commands matched (most recent first):\n");
+                for (int i = 0; i < (int)cmds.size(); i++) {
+                    printf("%s\n", cmds[i].c_str());
+                }
+                displayPrompt();
+                // should i display buf?
+            }
+
         } else if (c == TAB) {  // tab
             string s;
-            for (int j = buf.length() - 1; j >= 0 && buf[j] != ' '; j--) {
+            for (int j = buf.length() - 1; j >= 0 && buf[j] != ' ' && buf[j] != '/'; j--) {
                 s += buf[j];
             }
             reverse(s.begin(), s.end());
@@ -102,11 +136,11 @@ string readCommand() {
                         break;
                     }
                 }
-                if (ret_in == 4) {
+                if (ret_in == 4) {  // ctrl + D
                     ctrlD = 0;
                     buf = "";
                     break;
-                } else if (ret_in == 2) {
+                } else if (ret_in == 2) {  // ctrl + C
                     buf = "";
                     break;
                 }
@@ -134,25 +168,4 @@ string readCommand() {
     /* restore the former settings */
     tcsetattr(STDIN_FILENO, TCSANOW, &old_tio);
     return buf;
-}
-
-Pipeline* getCommand(string cmd) {
-    vector<string> piped_cmds = split(cmd, '|');
-    vector<Command*> cmds;
-
-    bool flag = 1;
-    for (auto cmd_str : piped_cmds) {
-        Command* c = new Command(cmd_str);
-        if (c->parse()) {
-            cmds.push_back(c);
-        } else {
-            flag = 0;
-            break;
-        }
-    }
-    if (flag) {
-        return new Pipeline(cmds);
-    } else {
-        return new Pipeline(-1);
-    }
 }

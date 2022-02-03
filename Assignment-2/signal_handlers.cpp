@@ -1,3 +1,4 @@
+#include <sys/inotify.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -13,8 +14,11 @@ extern pid_t fgpid;
 extern vector<Pipeline*> all_pipelines;
 extern map<pid_t, int> ind;
 
+extern int inotify_fd;
+extern map<pid_t, int> pgid_wd;
+
 // https://web.stanford.edu/class/archive/cs/cs110/cs110.1206/lectures/07-races-and-deadlock-slides.pdf
-void reapProcesses(int sig) {
+void reapProcesses(int signum) {
     while (true) {
         int status;
         pid_t pid = waitpid(-1, &status, WNOHANG | WUNTRACED | WCONTINUED);
@@ -25,20 +29,28 @@ void reapProcesses(int sig) {
         int id = ind[pid];
         Pipeline* pipeline = all_pipelines[id];
         if (WIFSIGNALED(status) || WIFEXITED(status)) {
+            // DEBUG("pid: %d, status: %d", pid, status);
+            // DEBUG("here");
             pipeline->num_active--;
+            // DEBUG("num_active: %d", pipeline->num_active);
             if (pipeline->num_active == 0) {
                 pipeline->status = DONE;
+                // DEBUG("pid: %d, status: %d", pid, status);
 
-                // add inotify_rm_watch
+                // remove from watch list
+                if (pgid_wd.find(pipeline->pgid) != pgid_wd.end()) {
+                    // DEBUG("here");
+                    inotify_rm_watch(inotify_fd, pgid_wd[pipeline->pgid]);
+                }
             }
         } else if (WIFSTOPPED(status)) {
             pipeline->num_active--;
             if (pipeline->num_active == 0) {
-                pipeline->status = DONE;
+                pipeline->status = STOPPED;
             }
         } else if (WIFCONTINUED(status)) {
-            pipeline->num_active--;
-            if (pipeline->num_active = (int)pipeline->cmds.size()) {
+            pipeline->num_active++;
+            if (pipeline->num_active == (int)pipeline->cmds.size()) {
                 pipeline->status = RUNNING;
             }
         }
@@ -83,4 +95,12 @@ void CZ_handler(int signum) {
     } else if (signum == SIGTSTP) {
         ctrlZ = 1;
     }
+}
+
+void multiWatch_SIGINT(int signum) {
+    for (auto it = pgid_wd.begin(); it != pgid_wd.end(); it++) {
+        kill(-it->first, SIGINT);
+    }
+    pgid_wd.clear();
+    close(inotify_fd);
 }

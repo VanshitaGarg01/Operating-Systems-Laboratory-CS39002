@@ -4,6 +4,17 @@
 #include "header.h"
 using namespace std;
 
+void trim(string& s) {
+    while (s.length() && s.back() == ' ') {
+        s.pop_back();
+    }
+    int i = 0;
+    while (i < (int)s.length() && s[i] == ' ') {
+        i++;
+    }
+    s = s.substr(i);
+}
+
 vector<string> split(string& str, char delim) {
     vector<string> tokens;
     stringstream ss(str);

@@ -11,9 +11,35 @@ using namespace std;
 extern vector<Pipeline*> all_pipelines;
 extern map<pid_t, int> ind;
 
+Pipeline::Pipeline(string& cmd) : cmd(cmd), pgid(-1) {}
+
 Pipeline::Pipeline(int num_p) : num_active(num_p), status(RUNNING) {}
 
-Pipeline::Pipeline(vector<Command*>& cmds) : cmds(cmds), pgid(0), num_active(cmds.size()), status(RUNNING) {}
+Pipeline::Pipeline(vector<Command*>& cmds) : cmds(cmds), pgid(-1), num_active(cmds.size()), status(RUNNING) {}
+
+void Pipeline::parse() {
+    vector<string> piped_cmds = split(this->cmd, '|');
+    vector<Command*> cmds;
+
+    bool flag = 1;
+    for (auto cmd_str : piped_cmds) {
+        Command* c = new Command(cmd_str);
+        if (c->parse()) {
+            cmds.push_back(c);
+        } else {
+            flag = 0;
+            break;
+        }
+    }
+    if (flag) {
+        this->cmds = cmds;
+        this->num_active = cmds.size();
+        this->status = RUNNING;
+    } else {
+        // throw exception
+        this->num_active = -1;
+    }
+}
 
 void Pipeline::executePipeline(bool isMultiwatch) {
     pid_t fg_pgid = 0;
@@ -41,8 +67,11 @@ void Pipeline::executePipeline(bool isMultiwatch) {
             signal(SIGINT, SIG_DFL);
             signal(SIGTSTP, SIG_DFL);
 
-            if (isMultiwatch) {
-                this->cmds[i]->output_file = ".tmp" + to_string(getpid()) + ".txt";
+            if (i == 0) {
+                fg_pgid = getpid();
+            }
+            if (isMultiwatch && i + 1 == cmds_size) {
+                this->cmds[i]->output_file = ".tmp" + to_string(fg_pgid) + ".txt";
             }
             this->cmds[i]->io_redirect();
 
