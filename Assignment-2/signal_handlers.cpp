@@ -21,20 +21,30 @@ void reapProcesses(int sig) {
         if (pid <= 0) {
             break;
         }
+
         int id = ind[pid];
-        // if (pid == fgpid) fgpid = 0;  // clear foreground process
+        Pipeline* pipeline = all_pipelines[id];
         if (WIFSIGNALED(status) || WIFEXITED(status)) {
-            all_pipelines[id]->status = DONE;
+            pipeline->num_active--;
+            if (pipeline->num_active == 0) {
+                pipeline->status = DONE;
+
+                // add inotify_rm_watch
+            }
         } else if (WIFSTOPPED(status)) {
-            all_pipelines[id]->status = STOPPED;
+            pipeline->num_active--;
+            if (pipeline->num_active == 0) {
+                pipeline->status = DONE;
+            }
         } else if (WIFCONTINUED(status)) {
-            all_pipelines[id]->status = RUNNING;
-            all_pipelines[id]->num_active = all_pipelines[id]->cmds.size();
+            pipeline->num_active--;
+            if (pipeline->num_active = (int)pipeline->cmds.size()) {
+                pipeline->status = RUNNING;
+            }
         }
 
-        if (all_pipelines[id]->pgid == fgpid && !WIFCONTINUED(status)) {
-            all_pipelines[id]->num_active--;
-            if (all_pipelines[id]->num_active == 0) {
+        if (pipeline->pgid == fgpid && !WIFCONTINUED(status)) {
+            if (pipeline->num_active == 0) {
                 fgpid = 0;
             }
         }
@@ -68,7 +78,6 @@ void waitForForegroundProcess(pid_t pid) {
 }
 
 void CZ_handler(int signum) {
-    // cin.setstate(ios::badbit);
     if (signum == SIGINT) {
         ctrlC = 1;
     } else if (signum == SIGTSTP) {

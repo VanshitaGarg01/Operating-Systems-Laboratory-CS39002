@@ -15,9 +15,7 @@ Pipeline::Pipeline(int num_p) : num_active(num_p), status(RUNNING) {}
 
 Pipeline::Pipeline(vector<Command*>& cmds) : cmds(cmds), pgid(0), num_active(cmds.size()), status(RUNNING) {}
 
-pid_t Pipeline::executePipeline(bool isMultiwatch) {
-    // need to set p.pgid to the pid of the first process in the pipeline - done
-
+void Pipeline::executePipeline(bool isMultiwatch) {
     pid_t fg_pgid = 0;
     int new_pipe[2], old_pipe[2];
 
@@ -43,9 +41,10 @@ pid_t Pipeline::executePipeline(bool isMultiwatch) {
             signal(SIGINT, SIG_DFL);
             signal(SIGTSTP, SIG_DFL);
 
-            // if (i == 0 || i + 1 == cmds_size) {
+            if (isMultiwatch) {
+                this->cmds[i]->output_file = ".tmp" + to_string(getpid()) + ".txt";
+            }
             this->cmds[i]->io_redirect();
-            // }
 
             if (i == 0) {
                 setpgrp();
@@ -55,13 +54,11 @@ pid_t Pipeline::executePipeline(bool isMultiwatch) {
                 close(old_pipe[0]);
                 close(old_pipe[1]);
             }
-
             if (i + 1 < cmds_size) {
                 dup2(new_pipe[1], this->cmds[i]->fd_out);  // output piping
                 close(new_pipe[0]);
                 close(new_pipe[1]);
             }
-
             if (this->cmds[i]->args[0] == "history") {
                 printHistory();
                 exit(0);
@@ -74,24 +71,17 @@ pid_t Pipeline::executePipeline(bool isMultiwatch) {
 
         } else {  // parent shell
             this->cmds[i]->pid = cpid;
-
             if (i == 0) {
                 fg_pgid = cpid;
                 this->pgid = cpid;
-
-                // cout << cpid << endl;
-
                 setpgid(cpid, fg_pgid);
                 all_pipelines.push_back(this);
-
-                // cout << p << endl;
 
                 // https://web.archive.org/web/20170701052127/https://www.usna.edu/Users/cs/aviv/classes/ic221/s16/lab/10/lab.html
                 tcsetpgrp(STDIN_FILENO, fg_pgid);
             } else {
                 setpgid(cpid, fg_pgid);
             }
-
             if (i > 0) {
                 close(old_pipe[0]);
                 close(old_pipe[1]);
@@ -99,12 +89,11 @@ pid_t Pipeline::executePipeline(bool isMultiwatch) {
             old_pipe[0] = new_pipe[0];
             old_pipe[1] = new_pipe[1];
 
-            // extra handling
             ind[cpid] = (int)all_pipelines.size() - 1;
         }
     }
 
-    if (this->cmds.back()->is_bg) {
+    if (this->cmds.back()->is_bg || isMultiwatch) {
         unblockSIGCHLD();
     } else {
         waitForForegroundProcess(fg_pgid);
@@ -113,13 +102,6 @@ pid_t Pipeline::executePipeline(bool isMultiwatch) {
         }
     }
     tcsetpgrp(STDIN_FILENO, getpid());
-
-    // for(auto it : all_pipelines) {
-    //     cout << *it << endl;
-    // }
-    // cout << *all_pipelines.back() << endl;
-
-    return fg_pgid;
 }
 
 ostream& operator<<(ostream& os, const Pipeline& p) {

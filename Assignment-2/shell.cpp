@@ -115,15 +115,6 @@ int main() {
 
         // cout << p << endl;
 
-        // cout << "CHAR ARRAY" << endl;
-        // for(int i = 0; i < p.cmds.size(); i++) {
-        //     // cout << p.cmds[i]->c_args.size() << endl;
-        //     for(int j = 0; j < p.cmds[i]->c_args.size() && p.cmds[i]->c_args[j] != nullptr; j++) {
-        //         cout << p.cmds[i]->c_args[j] << " ";
-        //     }
-        //     cout << endl;
-        // }
-
         string arg = p->cmds[0]->args[0];
         if (arg == "cd" || arg == "exit" || arg == "jobs") {
             bool builtin = handleBuiltin(*p);
@@ -134,23 +125,12 @@ int main() {
         }
 
         p->executePipeline();
-
-        // add exit
-        // add builtins
-
-        // 1 to last should read from stdin
-        // 0 to last - 1 should output to stdout
-        // doubtful : ls > temp.txt | sort -r
     }
 
     updateHistory();
 }
 
 /*
-jobs
-exit
-cd (optional)
-multiwatch
-history
-autocomplete
+pgid -> wd
+wd -> readfd
 */

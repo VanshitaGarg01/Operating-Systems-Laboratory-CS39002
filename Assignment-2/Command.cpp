@@ -143,3 +143,12 @@ ostream& operator<<(ostream& os, const Command& cmd) {
     cout << "is_bg: " << cmd.is_bg << endl;
     return os;
 }
+
+
+/*
+["ls",          "bash s.sh", "echo hello"]    >    out.txt
+"ls",          "bash s.sh", "echo hello"
+"ls"
+"bash s.sh"
+"echo hello"
+*/

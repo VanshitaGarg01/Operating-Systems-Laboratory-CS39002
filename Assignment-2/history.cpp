@@ -11,8 +11,6 @@ void loadHistory() {
     history.clear();
     ifstream file(".shell_history");
     if (!file.is_open()) {
-        //  No shell history?
-        // cout << "No file to open\n";
         return;
     } else {
         string line = "";
@@ -23,11 +21,12 @@ void loadHistory() {
     file.close();
 }
 
-string searchInHistory(string s) {
-    string command = "";
-    for (auto it : history) {
+vector<string> searchInHistory(string s) {
+    vector<string> commands;
+    for (int ind = history.size() - 1; ind >= 0; ind--) {
+        string hist_cmd = history[ind];
         char ch = '\0' + 229;
-        string t = s + ch + it;
+        string t = s + ch + hist_cmd;
         int n = t.size();
         vector<int> lps(n + 1);
         int i = 0, j = -1;
@@ -40,15 +39,15 @@ string searchInHistory(string s) {
             j++;
             lps[i] = j;
             if (lps[i] == (int)s.size()) {
-                if (s.size() == it.size()) {
-                    return s;
-                } else if (command == "") {
-                    command = it;
+                if (s.size() == hist_cmd.size()) {  // exact match
+                    return vector<string>(1, hist_cmd);
+                } else {
+                    commands.push_back(hist_cmd);
                 }
             }
         }
     }
-    return (s.size() > 1 ? command : "");
+    return (s.size() > 1 ? commands : vector<string>());
 }
 
 void printHistory() {

@@ -1,8 +1,8 @@
 CC=g++
 FLAGS=-Wall -std=c++14
 
-shell: shell.o Command.o Pipeline.o read_command.o utility.o history.o autocomplete.o signal_handlers.o
-	$(CC) $(FLAGS) shell.o Command.o Pipeline.o read_command.o utility.o history.o autocomplete.o signal_handlers.o -o shell
+vash: shell.o Command.o Pipeline.o read_command.o utility.o history.o autocomplete.o signal_handlers.o
+	$(CC) $(FLAGS) shell.o Command.o Pipeline.o read_command.o utility.o history.o autocomplete.o signal_handlers.o -o vash
 
 shell.o: shell.cpp header.h
 	$(CC) $(FLAGS) -c shell.cpp -o shell.o
@@ -29,4 +29,4 @@ signal_handlers.o: signal_handlers.cpp header.h
 	$(CC) $(FLAGS) -c signal_handlers.cpp -o signal_handlers.o
 
 clean:
-	rm *.o shell
+	rm *.o vash

@@ -17,23 +17,8 @@ void displayPrompt() {
     cout << COLOR_GREEN << "vash: " << COLOR_BLUE << dir << COLOR_RESET << "$ ";
 }
 
-// string readCommand() {
-//     string command;
-//     getline(cin, command);
-//     if (cin.bad()) {
-//         cin.clear();
-//         cout << endl;
-//         return "";
-//     }
-//     // cout << command << " " << command.length() << endl;
-//     return command;
-//     // getline();
-//     // currently may just read string using getline, however we will shift to termios, char by char
-//     // return the command as it is as read
-// }
-
 int handleChar(char c, string& buf) {
-    if (c == -1) {  // ctrl + C, ctrl + Z
+    if (c == CTRL_CZ) {  // ctrl + C, ctrl + Z
         if (ctrlC) {
             printf("\n");
             buf = "";
@@ -43,17 +28,17 @@ int handleChar(char c, string& buf) {
             ctrlZ = 0;
             return 0;
         }
-    } else if (c == 4) {  // ctrl + D
+    } else if (c == CTRL_D) {  // ctrl + D
         ctrlD = 1;
         buf = "";
         return 4;
-    } else if (c == 127) {  // backspace
+    } else if (c == BACKSPACE) {  // backspace
         if (buf.length() > 0) {
             printf("\b \b");
             buf.pop_back();
         }
         return 0;
-    } else if (c == '\n') {  // enter
+    } else if (c == ENTER) {  // enter
         printf("\n");
         return 1;
     } else {
@@ -84,10 +69,12 @@ string readCommand() {
     while (1) {
         int ret_in, ret_out;
         c = getchar();
-        if (c == 18) {  // ctrl + r
+        if (c == CTRL_R) {  // ctrl + r
+        
             // history search
             printf("\n");
-        } else if (c == '\t') {  // tab
+            
+        } else if (c == TAB) {  // tab
             string s;
             for (int j = buf.length() - 1; j >= 0 && buf[j] != ' '; j--) {
                 s += buf[j];
@@ -123,7 +110,6 @@ string readCommand() {
                     buf = "";
                     break;
                 }
-                // add error checking in stoi
                 try {
                     int num = stoi(n);
                     if (num > (int)complete_options.size() || num <= 0) {
@@ -134,8 +120,6 @@ string readCommand() {
                 } catch (...) {
                     printf("Invalid Choice\n");
                 }
-                // PROMPT();
-                // printf("Assignment-2>> ");
                 displayPrompt();
                 printf("%s", buf.c_str());
             }
@@ -149,15 +133,11 @@ string readCommand() {
 
     /* restore the former settings */
     tcsetattr(STDIN_FILENO, TCSANOW, &old_tio);
-    // string command(buf);
-    // addToHistory(command);
     return buf;
 }
 
 Pipeline* getCommand(string cmd) {
-    // cout << "Assignment-2>> ";
     vector<string> piped_cmds = split(cmd, '|');
-    // cout << piped_cmds.size() << endl;
     vector<Command*> cmds;
 
     bool flag = 1;

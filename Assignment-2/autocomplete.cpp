@@ -24,12 +24,10 @@ vector<string> getFilesInCurrDir() {
         closedir(dir);
     } else {
         cout << "Directory could not be opened";
-        // handle case? do better error handling
     }
     return files;
 }
 
-// check algo once
 vector<string> autocomplete(string s) {
     vector<string> filenames = getFilesInCurrDir();
     vector<string> matched;
@@ -41,15 +39,20 @@ vector<string> autocomplete(string s) {
             matched.push_back(filenames[i]);
         }
     }
-    if (matched.size() == 1) {
-        s = matched[0];
-    } else if (matched.size() > 1) {
+
+    if ((int)matched.size() <= 1) {
+        return matched;
+    } else {
         sort(matched.begin(), matched.end());
         int i = 0;
-        s = "";
-        while (i < (int)min(matched[0].size(), matched.back().size()) && matched[0][i] == matched.back()[i]) {
-            s += matched[0][i++];
+        string suggest = "";
+        while (i < (int)min(matched.front().size(), matched.back().size()) && matched.front()[i] == matched.back()[i]) {
+            suggest += matched[0][i++];
+        }
+        if (suggest.length() > s.length()) {
+            return vector<string>(1, suggest);
+        } else {
+            return matched;
         }
     }
-    return matched;
 }

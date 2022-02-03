@@ -31,6 +31,13 @@ using namespace std;
 #define STOPPED 1
 #define DONE 2
 
+#define CTRL_CZ -1
+#define CTRL_D 4
+#define CTRL_R 18
+#define BACKSPACE 127
+#define TAB 9
+#define ENTER 10
+
 /* Command.cpp */
 class Command {
    public:
@@ -59,7 +66,7 @@ class Pipeline {
 
     Pipeline(int num_p);
     Pipeline(vector<Command*>& cmds);
-    pid_t executePipeline(bool isMultiwatch = false);
+    void executePipeline(bool isMultiwatch = false);
     friend ostream& operator<<(ostream& os, const Pipeline& p);
 };
 
@@ -74,7 +81,7 @@ Pipeline* getCommand(string cmd);
 
 /* history.cpp */
 void loadHistory();
-string searchInHistory(string s);
+vector<string> searchInHistory(string s);
 void printHistory();
 void addToHistory(string s);
 void updateHistory();
@@ -90,6 +97,8 @@ void blockSIGCHLD();
 void unblockSIGCHLD();
 void waitForForegroundProcess(pid_t pid);
 void CZ_handler(int signum);
+
+/* multiwatch.cpp */
 
 /* shell.cpp */
 
