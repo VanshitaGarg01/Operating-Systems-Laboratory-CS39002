@@ -13,31 +13,31 @@ extern map<pid_t, int> ind;
 
 Pipeline::Pipeline(string& cmd) : cmd(cmd), pgid(-1) {}
 
-Pipeline::Pipeline(int num_p) : num_active(num_p), status(RUNNING) {}
-
 Pipeline::Pipeline(vector<Command*>& cmds) : cmds(cmds), pgid(-1), num_active(cmds.size()), status(RUNNING) {}
 
 void Pipeline::parse() {
-    vector<string> piped_cmds = split(this->cmd, '|');
-    vector<Command*> cmds;
-
-    bool flag = 1;
-    for (auto cmd_str : piped_cmds) {
-        Command* c = new Command(cmd_str);
-        if (c->parse()) {
-            cmds.push_back(c);
-        } else {
-            flag = 0;
-            break;
-        }
+    trim(this->cmd);
+    if (this->cmd.back() == '&') {
+        this->is_bg = true;
+        this->cmd.pop_back();
     }
-    if (flag) {
+    vector<string> piped_cmds = split(this->cmd, '|');
+
+    try {
+        vector<Command*> cmds;
+        for (int i = 0; i < (int)piped_cmds.size(); i++) {
+            Command* c = new Command(piped_cmds[i]);
+            c->parse();
+            if (c->args.size() == 0) {
+                throw ShellException("Empty command");
+            }
+            cmds.push_back(c);
+        }
         this->cmds = cmds;
         this->num_active = cmds.size();
         this->status = RUNNING;
-    } else {
-        // throw exception
-        this->num_active = -1;
+    } catch (ShellException& e) {
+        throw;
     }
 }
 
@@ -53,13 +53,15 @@ void Pipeline::executePipeline(bool isMultiwatch) {
             int ret = pipe(new_pipe);
             if (ret < 0) {
                 perror("pipe");
-                exit(1);
+                // exit(1);
+                throw ShellException("Unable to create pipe");
             }
         }
         pid_t cpid = fork();
         if (cpid < 0) {
             perror("fork");
-            exit(1);
+            // exit(1);
+            throw ShellException("Unable to fork");
         }
         if (cpid == 0) {  // child
             unblockSIGCHLD();
@@ -88,6 +90,7 @@ void Pipeline::executePipeline(bool isMultiwatch) {
                 close(new_pipe[0]);
                 close(new_pipe[1]);
             }
+
             if (this->cmds[i]->args[0] == "history") {
                 printHistory();
                 exit(0);
@@ -122,7 +125,7 @@ void Pipeline::executePipeline(bool isMultiwatch) {
         }
     }
 
-    if (this->cmds.back()->is_bg || isMultiwatch) {
+    if (this->is_bg || isMultiwatch) {
         unblockSIGCHLD();
     } else {
         waitForForegroundProcess(fg_pgid);

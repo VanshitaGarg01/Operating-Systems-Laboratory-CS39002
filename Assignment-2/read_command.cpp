@@ -41,7 +41,7 @@ int handleChar(char c, string& buf) {
     } else if (c == ENTER) {  // enter
         printf("\n");
         return 1;
-    } else {
+    } else if (c > 31 && c < 127) {  // printable
         printf("%c", c);
         buf += c;
         return 0;

@@ -15,8 +15,8 @@ map<int, int> wd_ind;
 
 vector<Pipeline*> parseMultiWatch(string cmd, string& output_file) {
     trim(cmd);
-    if (cmd.length() < 10) {
-        return vector<Pipeline*>(1, NULL);
+    if (cmd.length() < 10) {    // not multiwatch
+        return vector<Pipeline*>();
     }
     vector<Pipeline*> pipelines;
     if (cmd.substr(0, 10) == "multiWatch") {
@@ -30,7 +30,7 @@ vector<Pipeline*> parseMultiWatch(string cmd, string& output_file) {
                     i--;
                 }
                 if (i == -1) {
-                    // return empty
+                    throw ShellException("Could not find ']");
                 } else {
                     output_file = cmd.substr(i + 1);
                     cmd = cmd.substr(0, i + 1);
@@ -40,7 +40,7 @@ vector<Pipeline*> parseMultiWatch(string cmd, string& output_file) {
                             output_file = output_file.substr(1);
                             trim(output_file);
                         } else {
-                            // return
+                            throw ShellException("Unable to parse output file after >");
                         }
                     }
                 }
@@ -55,7 +55,7 @@ vector<Pipeline*> parseMultiWatch(string cmd, string& output_file) {
                     if (command[0] == '\"' && command.back() == '\"') {
                         command = command.substr(1, command.length() - 2);
                     } else {
-                        // return pipelines;
+                        throw ShellException("No quotes around command");
                     }
                 }
                 for (auto& command : commands) {
@@ -64,14 +64,13 @@ vector<Pipeline*> parseMultiWatch(string cmd, string& output_file) {
                     pipelines.push_back(p);
                 }
             } else {
-                // return empty?
+                throw ShellException("Could not find '[");
             }
         } else {
-            // return empty?
+            throw ShellException("No commands after multiWatch");
         }
     } else {
-        // parsing error
-        // return empty?
+        return vector<Pipeline*>();
     }
     return pipelines;
 }
@@ -80,7 +79,8 @@ void executeMultiWatch(vector<Pipeline*>& pList, string output_file) {
     inotify_fd = inotify_init();
     if (inotify_fd < 0) {
         perror("inotify_init");
-        exit(1);
+        // exit(1);
+        throw ShellException("Unable to create inotify instance");
     }
 
     vector<int> fds;
@@ -92,7 +92,8 @@ void executeMultiWatch(vector<Pipeline*>& pList, string output_file) {
             int temp_fd = open(tmpFile.c_str(), O_CREAT, 0644);
             if (temp_fd < 0) {
                 perror("open");
-                exit(1);
+                // exit(1);
+                throw ShellException("Unable to open tmp file");
             }
             close(temp_fd);
             fd = open(tmpFile.c_str(), O_RDONLY);
@@ -101,7 +102,8 @@ void executeMultiWatch(vector<Pipeline*>& pList, string output_file) {
         int wd = inotify_add_watch(inotify_fd, tmpFile.c_str(), IN_MODIFY);
         if (wd < 0) {
             perror("inotify_add_watch");
-            exit(1);
+            // exit(1);
+            throw ShellException("Unable to add watch");
         }
         pgid_wd[pList[i]->pgid] = wd;
         wd_ind[wd] = i;
@@ -121,7 +123,8 @@ void executeMultiWatch(vector<Pipeline*>& pList, string output_file) {
         out_fp = fopen(output_file.c_str(), "w");
         if (out_fp == NULL) {
             perror("fopen");
-            exit(1);
+            // exit(1);
+            throw ShellException("Unable to open output file");
         }
         // DEBUG("out_fp: %p", out_fp);
     }
@@ -139,7 +142,8 @@ void executeMultiWatch(vector<Pipeline*>& pList, string output_file) {
         if (num_read < 0 && errno != EINTR && errno != EBADF) {
             // DEBUG("errno: %d", errno);
             perror("read");
-            exit(1);
+            // exit(1);
+            throw ShellException("Unable to read from inotify instance");
         } else if (errno == EBADF) {
             break;
         }
@@ -176,7 +180,8 @@ void executeMultiWatch(vector<Pipeline*>& pList, string output_file) {
                 string tmpFile = ".tmp" + to_string(pList[wd_ind[event->wd]]->pgid) + ".txt";
                 if (remove(tmpFile.c_str()) < 0) {
                     perror("remove");
-                    exit(1);
+                    // exit(1);
+                    throw ShellException("Unable to remove tmp file");
                 }
                 // DEBUG("num_running: %d", num_running);
             }
@@ -191,4 +196,7 @@ void executeMultiWatch(vector<Pipeline*>& pList, string output_file) {
     // DEBUG("yahan");
     close(inotify_fd);
     // DEBUG("wahan");
+    if (out_fp != stdout) {
+        fclose(out_fp);
+    }
 }

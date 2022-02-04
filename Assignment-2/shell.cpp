@@ -18,23 +18,20 @@ deque<string> history;
 vector<Pipeline*> all_pipelines;
 map<pid_t, int> ind;
 
-bool shellCd(string arg) {
-    if (arg.size() == 0) {
-        return false;
-    }
+void shellCd(string arg) {
+    // check for arg empty
     if (chdir(arg.c_str()) < 0) {
-        return false;
+        perror("chdir");
+        throw ShellException("Unable to change directory");
     }
-    return true;
 }
 
-bool shellExit(string arg = "") {
+void shellExit(string arg = "") {
     updateHistory();
     exit(0);
-    return true;
 }
 
-bool shellJobs(string arg = "") {
+void shellJobs(string arg = "") {
     for (int i = 0; i < (int)all_pipelines.size(); i++) {
         cout << "pgid: " << all_pipelines[i]->pgid << ": ";
         int status = all_pipelines[i]->status;
@@ -52,21 +49,23 @@ bool shellJobs(string arg = "") {
             cout << "--- pid: " << cmds[j]->pid << " " << cmds[j]->cmd << endl;
         }
     }
-    return true;
 }
 
 vector<string> builtins = {"cd", "exit", "jobs"};
-bool (*builtin_funcs[])(string args) = {&shellCd, &shellExit, &shellJobs};
+void (*builtin_funcs[])(string args) = {&shellCd, &shellExit, &shellJobs};
 
-bool handleBuiltin(Pipeline& p) {
-    string cmd = p.cmds[0]->args[0];
-    for (int i = 0; i < (int)builtins.size(); i++) {
-        if (cmd == builtins[i]) {
-            string arg = (p.cmds[0]->args.size() > 1) ? p.cmds[0]->args[1] : "";
-            return (*builtin_funcs[i])(arg);
+void handleBuiltin(Pipeline& p) {
+    try {
+        string cmd = p.cmds[0]->args[0];
+        for (int i = 0; i < (int)builtins.size(); i++) {
+            if (cmd == builtins[i]) {
+                string arg = (p.cmds[0]->args.size() > 1) ? p.cmds[0]->args[1] : "";
+                (*builtin_funcs[i])(arg);
+            }
         }
+    } catch (ShellException& e) {
+        throw;
     }
-    return false;
 }
 
 int main() {
@@ -92,84 +91,34 @@ int main() {
         displayPrompt();
 
         string cmd = readCommand();
+        trim(cmd);
         if (cmd == "") {
             continue;
         }
-        // need to add command to history
         addToHistory(cmd);
 
         string output_file = "";
         vector<Pipeline*> pList = parseMultiWatch(cmd, output_file);
-
-        // cout << pList.size() << endl;
-        // cout << output_file << endl;
-        // for (auto& p : pList) {
-        //     if (p != NULL) {
-        //         cout << *p << endl;
-        //     }
-        // }
-        // if (pList.size() == 1 && pList[0] == NULL) {
-        //     DEBUG("here");
-        //     continue;
-        // }
-        // continue;
-
-        // if (pList.size() == 1 && pList[0] == NULL) {
-        //     // DEBUG("here");
-        //     cout << "Error while parsing command" << endl;
-        //     continue;
-        // } else 
-        if (pList.size() > 0 && pList[0] != NULL) {
+        if (pList.size() > 0) {  // multiWatch
             struct sigaction multiWatch_action;
             multiWatch_action.sa_handler = multiWatch_SIGINT;
             sigemptyset(&multiWatch_action.sa_mask);
             multiWatch_action.sa_flags = 0;
             sigaction(SIGINT, &multiWatch_action, NULL);
-
             executeMultiWatch(pList, output_file);
-
             // revert back
             sigaction(SIGINT, &action, NULL);
             continue;
-        }
-
-        // cout << cmd << endl;
-
-        Pipeline* p = new Pipeline(cmd);
-        p->parse();
-        if (p->num_active == -1) {
-            cout << "Error while parsing command" << endl;
-            continue;
-        }
-
-        if (p->cmds[0]->args.size() == 0) {
-            if (cmd.size() > 0) {
-                cout << "Invalid command" << endl;
+        } else {
+            Pipeline* p = new Pipeline(cmd);
+            p->parse();
+            string arg = p->cmds[0]->args[0];
+            if (arg == "cd" || arg == "exit" || arg == "jobs") {
+                handleBuiltin(*p);
             }
-            continue;
+            p->executePipeline();
         }
-
-        // cout << *p << endl;
-        // continue;
-
-        string arg = p->cmds[0]->args[0];
-        if (arg == "cd" || arg == "exit" || arg == "jobs") {
-            bool builtin = handleBuiltin(*p);
-            if (!builtin) {
-                cout << "Error occurred in builtin command" << endl;
-            }
-            continue;
-        }
-
-        p->executePipeline();
     }
 
     updateHistory();
 }
-
-/*
-todo: 
-ctrl + R
-remove tmp files
-exception handling
-*/

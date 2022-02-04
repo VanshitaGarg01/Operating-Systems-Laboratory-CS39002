@@ -57,13 +57,12 @@ class Command {
     vector<string> args;
     int fd_in, fd_out;
     string input_file, output_file;
-    bool is_bg;
     pid_t pid;
 
     Command(const string& cmd);
     ~Command();
 
-    int parse();
+    void parse();
     void io_redirect();
     friend ostream& operator<<(ostream& os, const Command& cmd);
 };
@@ -73,12 +72,12 @@ class Pipeline {
    public:
     string cmd;
     vector<Command*> cmds;
+    bool is_bg;
     pid_t pgid;
     int num_active;
     int status;
 
     Pipeline(string& cmd);
-    Pipeline(int num_p);
     Pipeline(vector<Command*>& cmds);
     void parse();
     void executePipeline(bool isMultiwatch = false);
