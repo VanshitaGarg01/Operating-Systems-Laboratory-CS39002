@@ -20,7 +20,13 @@
 #define LOG(msg, ...) printf(COLOR_BLUE "[LOG] " msg COLOR_RESET "\n", ##__VA_ARGS__);
 #define PROMPT(msg, ...) printf(COLOR_GREEN msg COLOR_RESET  "\n", ##__VA_ARGS__);
 
+int main(int argc, char *argv[]) {
+    int a[10];
+    for(int i = 0; i < 10; i++) {
+        scanf("%d", &a[i]);
+    }
 
-int main() {
-    SUCCESS("Hello World!");
+    for(int i = 0; i < 10; i++) {
+        printf("%d\n", a[i]);
+    }
 }

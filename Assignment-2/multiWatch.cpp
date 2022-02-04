@@ -15,7 +15,7 @@ map<int, int> wd_ind;
 
 vector<Pipeline*> parseMultiWatch(string cmd, string& output_file) {
     trim(cmd);
-    if (cmd.length() < 10) {    // not multiwatch
+    if (cmd.length() < 10) {  // not multiwatch
         return vector<Pipeline*>();
     }
     vector<Pipeline*> pipelines;
@@ -39,8 +39,11 @@ vector<Pipeline*> parseMultiWatch(string cmd, string& output_file) {
                         if (output_file[0] == '>') {
                             output_file = output_file.substr(1);
                             trim(output_file);
+                            if (output_file.length() == 0) {
+                                throw ShellException("No output file after >");
+                            }
                         } else {
-                            throw ShellException("Unable to parse output file after >");
+                            throw ShellException("Unable to parse after multiWatch");
                         }
                     }
                 }
@@ -162,7 +165,7 @@ void executeMultiWatch(vector<Pipeline*>& pList, string output_file) {
                     if (!seen_data) {
                         int sz = pList[wd_ind[event->wd]]->cmd.length() + to_string(time(NULL)).length() + 4;
                         string line(sz, '-');
-                        fprintf(out_fp, "\n%s\n%s, %ld :\n%s\n", line.c_str(), pList[wd_ind[event->wd]]->cmd.c_str(), time(NULL), line.c_str());
+                        fprintf(out_fp, "%s\n%s, %ld :\n%s\n", line.c_str(), pList[wd_ind[event->wd]]->cmd.c_str(), time(NULL), line.c_str());
                         fflush(out_fp);
                         seen_data = 1;
                     }
@@ -177,12 +180,6 @@ void executeMultiWatch(vector<Pipeline*>& pList, string output_file) {
                 num_running--;
                 close(fds[wd_ind[event->wd]]);
                 // DEBUG("pgid: %d", pList[wd_ind[event->wd]]->pgid);
-                string tmpFile = ".tmp" + to_string(pList[wd_ind[event->wd]]->pgid) + ".txt";
-                if (remove(tmpFile.c_str()) < 0) {
-                    perror("remove");
-                    // exit(1);
-                    throw ShellException("Unable to remove tmp file");
-                }
                 // DEBUG("num_running: %d", num_running);
             }
 
@@ -192,6 +189,14 @@ void executeMultiWatch(vector<Pipeline*>& pList, string output_file) {
         // DEBUG("num_running: %d", num_running);
     }
 
+    for (auto it = pgid_wd.begin(); it != pgid_wd.end(); it++) {
+        string tmpFile = ".tmp" + to_string(it->first) + ".txt";
+        if (remove(tmpFile.c_str()) < 0) {
+            perror("remove");
+            // exit(1);
+            throw ShellException("Unable to remove tmp file");
+        }
+    }
     pgid_wd.clear();
     // DEBUG("yahan");
     close(inotify_fd);

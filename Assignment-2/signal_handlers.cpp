@@ -101,6 +101,5 @@ void multiWatch_SIGINT(int signum) {
     for (auto it = pgid_wd.begin(); it != pgid_wd.end(); it++) {
         kill(-it->first, SIGINT);
     }
-    pgid_wd.clear();
     close(inotify_fd);
 }

@@ -11,9 +11,9 @@ using namespace std;
 extern vector<Pipeline*> all_pipelines;
 extern map<pid_t, int> ind;
 
-Pipeline::Pipeline(string& cmd) : cmd(cmd), pgid(-1) {}
+Pipeline::Pipeline(string& cmd) : cmd(cmd), is_bg(0), pgid(-1) {}
 
-Pipeline::Pipeline(vector<Command*>& cmds) : cmds(cmds), pgid(-1), num_active(cmds.size()), status(RUNNING) {}
+Pipeline::Pipeline(vector<Command*>& cmds) : cmds(cmds), is_bg(0), pgid(-1), num_active(cmds.size()), status(RUNNING) {}
 
 void Pipeline::parse() {
     trim(this->cmd);
@@ -137,7 +137,8 @@ void Pipeline::executePipeline(bool isMultiwatch) {
 }
 
 ostream& operator<<(ostream& os, const Pipeline& p) {
-    cout << p.pgid << endl;
+    cout << "p.pgid: " << p.pgid << endl;
+    cout << "p.is_bg: " << p.is_bg << endl;
     for (auto it : p.cmds) {
         os << *it << endl;
     }

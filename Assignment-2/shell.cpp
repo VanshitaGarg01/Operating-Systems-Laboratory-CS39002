@@ -19,10 +19,12 @@ vector<Pipeline*> all_pipelines;
 map<pid_t, int> ind;
 
 void shellCd(string arg) {
-    // check for arg empty
+    trim(arg);
+    if (arg == "") {
+        throw ShellException("No directory specified");
+    }
     if (chdir(arg.c_str()) < 0) {
         perror("chdir");
-        throw ShellException("Unable to change directory");
     }
 }
 
@@ -87,9 +89,8 @@ int main() {
     // https://web.archive.org/web/20170701052127/https://www.usna.edu/Users/cs/aviv/classes/ic221/s16/lab/10/lab.html
     signal(SIGCHLD, reapProcesses);
 
-    while (!ctrlD) {  // add global variable
+    while (!ctrlD) {
         displayPrompt();
-
         string cmd = readCommand();
         trim(cmd);
         if (cmd == "") {
@@ -97,26 +98,33 @@ int main() {
         }
         addToHistory(cmd);
 
-        string output_file = "";
-        vector<Pipeline*> pList = parseMultiWatch(cmd, output_file);
-        if (pList.size() > 0) {  // multiWatch
-            struct sigaction multiWatch_action;
-            multiWatch_action.sa_handler = multiWatch_SIGINT;
-            sigemptyset(&multiWatch_action.sa_mask);
-            multiWatch_action.sa_flags = 0;
-            sigaction(SIGINT, &multiWatch_action, NULL);
-            executeMultiWatch(pList, output_file);
-            // revert back
-            sigaction(SIGINT, &action, NULL);
-            continue;
-        } else {
-            Pipeline* p = new Pipeline(cmd);
-            p->parse();
-            string arg = p->cmds[0]->args[0];
-            if (arg == "cd" || arg == "exit" || arg == "jobs") {
-                handleBuiltin(*p);
+        try {
+            string output_file = "";
+            vector<Pipeline*> pList = parseMultiWatch(cmd, output_file);
+            if (pList.size() > 0) {  // multiWatch
+                struct sigaction multiWatch_action;
+                multiWatch_action.sa_handler = multiWatch_SIGINT;
+                sigemptyset(&multiWatch_action.sa_mask);
+                multiWatch_action.sa_flags = 0;
+                sigaction(SIGINT, &multiWatch_action, NULL);
+                executeMultiWatch(pList, output_file);
+                // revert back
+                sigaction(SIGINT, &action, NULL);
+            } else {
+                Pipeline* p = new Pipeline(cmd);
+                p->parse();
+                string arg = p->cmds[0]->args[0];
+                if (arg == "cd" || arg == "exit" || arg == "jobs") {
+                    handleBuiltin(*p);
+                    continue;
+                }
+                // cout << *p << endl;
+                // DEBUG("parsed");
+                p->executePipeline();
+                // DEBUG("executed");
             }
-            p->executePipeline();
+        } catch (ShellException& e) {
+            cout << e.what() << endl;
         }
     }
 
