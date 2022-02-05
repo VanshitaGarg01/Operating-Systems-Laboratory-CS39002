@@ -47,7 +47,7 @@ vector<string> searchInHistory(string s) {
             }
         }
     }
-    return (s.size() > 1 ? commands : vector<string>());
+    return (s.size() > 2 ? commands : vector<string>());
 }
 
 void printHistory() {
