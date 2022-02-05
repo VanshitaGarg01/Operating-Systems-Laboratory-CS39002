@@ -134,7 +134,7 @@ void executeMultiWatch(vector<Pipeline*>& pList, string output_file) {
 
     int event_size = sizeof(struct inotify_event);
     int event_buf_len = 1024 * (event_size + 16);
-    struct inotify_event event_buf[event_buf_len];
+    char event_buf[event_buf_len] __attribute__((aligned(__alignof__(struct inotify_event))));
 
     char buf[BUF_SIZE];
 
