@@ -1,15 +1,15 @@
+#include "Pipeline.h"
+
 #include <signal.h>
 #include <sys/signal.h>
 #include <unistd.h>
 
-#include <map>
-
-#include "header.h"
+#include "ShellException.h"
+#include "history.h"
+#include "signal_handlers.h"
+#include "utility.h"
 
 using namespace std;
-
-extern vector<Pipeline*> all_pipelines;
-extern map<pid_t, int> ind;
 
 Pipeline::Pipeline(string& cmd) : cmd(cmd), is_bg(0), pgid(-1) {}
 
@@ -26,6 +26,10 @@ void Pipeline::parse() {
     try {
         vector<Command*> cmds;
         for (int i = 0; i < (int)piped_cmds.size(); i++) {
+            trim(piped_cmds[i]);
+            if (piped_cmds[i] == "") {
+                throw ShellException("Empty command in pipe");
+            }
             Command* c = new Command(piped_cmds[i]);
             c->parse();
             if (c->args.size() == 0) {
@@ -53,14 +57,12 @@ void Pipeline::executePipeline(bool isMultiwatch) {
             int ret = pipe(new_pipe);
             if (ret < 0) {
                 perror("pipe");
-                // exit(1);
                 throw ShellException("Unable to create pipe");
             }
         }
         pid_t cpid = fork();
         if (cpid < 0) {
             perror("fork");
-            // exit(1);
             throw ShellException("Unable to fork");
         }
         if (cpid == 0) {  // child
@@ -100,7 +102,6 @@ void Pipeline::executePipeline(bool isMultiwatch) {
                 perror("execvp");
                 exit(1);
             }
-
         } else {  // parent shell
             this->cmds[i]->pid = cpid;
             if (i == 0) {

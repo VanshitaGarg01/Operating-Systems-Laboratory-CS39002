@@ -1,15 +1,16 @@
-#include <deque>
-#include <fstream>
+#include "history.h"
 
-#include "header.h"
+#include <fstream>
+#include <iostream>
 
 using namespace std;
 
-extern deque<string> history;
+deque<string> history;
+const string HIST_FILE = ".shell_history";
 
 void loadHistory() {
     history.clear();
-    ifstream file(".shell_history");
+    ifstream file(HIST_FILE);
     if (!file.is_open()) {
         return;
     } else {
@@ -65,10 +66,8 @@ void addToHistory(string s) {
 }
 
 void updateHistory() {
-    // int fd = open(".shell_history.txt", O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR);
     ofstream file(HIST_FILE);
     if (!file.is_open()) {
-        //  No shell history?
         return;
     } else {
         for (auto it : history) {

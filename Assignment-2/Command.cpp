@@ -1,9 +1,9 @@
+#include "Command.h"
+#include "ShellException.h"
+
 #include <fcntl.h>
 #include <unistd.h>
 
-#include <map>
-
-#include "header.h"
 using namespace std;
 
 Command::Command(const string& cmd) : cmd(cmd), fd_in(STDIN_FILENO), fd_out(STDOUT_FILENO), input_file(""), output_file("") {}

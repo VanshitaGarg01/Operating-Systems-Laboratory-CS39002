@@ -1,3 +1,5 @@
+#include "shell.h"
+
 #include <signal.h>
 #include <sys/signal.h>
 #include <sys/types.h>
@@ -7,14 +9,20 @@
 #include <deque>
 #include <map>
 
-#include "header.h"
+#include "Command.h"
+#include "Pipeline.h"
+#include "ShellException.h"
+#include "history.h"
+#include "multiWatch.h"
+#include "read_command.h"
+#include "signal_handlers.h"
+#include "utility.h"
 
 using namespace std;
 
 bool ctrlC = 0, ctrlZ = 0, ctrlD = 0;
 pid_t fgpid = 0;
 
-deque<string> history;
 vector<Pipeline*> all_pipelines;
 map<pid_t, int> ind;
 
@@ -28,12 +36,12 @@ void shellCd(string arg) {
     }
 }
 
-void shellExit(string arg = "") {
+void shellExit(string arg) {
     updateHistory();
     exit(0);
 }
 
-void shellJobs(string arg = "") {
+void shellJobs(string arg) {
     for (int i = 0; i < (int)all_pipelines.size(); i++) {
         cout << "pgid: " << all_pipelines[i]->pgid << ": ";
         int status = all_pipelines[i]->status;
@@ -74,11 +82,9 @@ int main() {
     // perform bootup tasks, like loading history into deque
     loadHistory();
 
-    // pid_t shid = getpid();
-
     // add signal handlers
     struct sigaction action;
-    action.sa_handler = CZ_handler;  // SIG_IGN willignore the interrupt and getchar will be blocked
+    action.sa_handler = CZ_handler;
     sigemptyset(&action.sa_mask);
     action.sa_flags = 0;
 
@@ -107,10 +113,15 @@ int main() {
                 sigemptyset(&multiWatch_action.sa_mask);
                 multiWatch_action.sa_flags = 0;
                 sigaction(SIGINT, &multiWatch_action, NULL);
+                signal(SIGTSTP, SIG_IGN);
                 executeMultiWatch(pList, output_file);
                 // revert back
                 sigaction(SIGINT, &action, NULL);
+                sigaction(SIGTSTP, &action, NULL);
             } else {
+                if (cmd.size() >= 10 && cmd.substr(0, 10) == "multiWatch") {
+                    throw ShellException("Error while parsing command");
+                }
                 Pipeline* p = new Pipeline(cmd);
                 p->parse();
                 string arg = p->cmds[0]->args[0];
@@ -118,15 +129,11 @@ int main() {
                     handleBuiltin(*p);
                     continue;
                 }
-                // cout << *p << endl;
-                // DEBUG("parsed");
                 p->executePipeline();
-                // DEBUG("executed");
             }
         } catch (ShellException& e) {
             cout << e.what() << endl;
         }
     }
-
     updateHistory();
 }

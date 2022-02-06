@@ -1,7 +1,8 @@
+#include "utility.h"
+
 #include <cstring>
 #include <sstream>
 
-#include "header.h"
 using namespace std;
 
 void trim(string& s) {
@@ -33,6 +34,5 @@ vector<char*> cstrArray(vector<string>& args) {
     }
     args_[args.size()] = (char*)malloc(sizeof(char));
     args_[args.size()] = nullptr;
-    // strcpy(args_[args.size()], "\0");
     return args_;
 }

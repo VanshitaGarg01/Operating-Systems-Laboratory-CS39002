@@ -1,3 +1,5 @@
+#include "signal_handlers.h"
+
 #include <sys/inotify.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -5,17 +7,7 @@
 
 #include <map>
 
-#include "header.h"
 using namespace std;
-
-extern bool ctrlC, ctrlZ, ctrlD;
-extern pid_t fgpid;
-
-extern vector<Pipeline*> all_pipelines;
-extern map<pid_t, int> ind;
-
-extern int inotify_fd;
-extern map<pid_t, int> pgid_wd;
 
 // https://web.stanford.edu/class/archive/cs/cs110/cs110.1206/lectures/07-races-and-deadlock-slides.pdf
 void reapProcesses(int signum) {
@@ -29,17 +21,11 @@ void reapProcesses(int signum) {
         int id = ind[pid];
         Pipeline* pipeline = all_pipelines[id];
         if (WIFSIGNALED(status) || WIFEXITED(status)) {
-            // DEBUG("pid: %d, status: %d", pid, status);
-            // DEBUG("here");
             pipeline->num_active--;
-            // DEBUG("num_active: %d", pipeline->num_active);
             if (pipeline->num_active == 0) {
                 pipeline->status = DONE;
-                // DEBUG("pid: %d, status: %d", pid, status);
-
                 // remove from watch list
                 if (pgid_wd.find(pipeline->pgid) != pgid_wd.end()) {
-                    // DEBUG("here");
                     inotify_rm_watch(inotify_fd, pgid_wd[pipeline->pgid]);
                 }
             }

@@ -24,26 +24,8 @@ using namespace std;
 
 
 int main() {
-    cout << "Unable to parse '\"'" << endl;
+    for (int i = 0; i < 10; i++) {
+        cout << i << endl;
+    }
+    // while(1);
 }
-
-/*
-// cout << pList.size() << endl;
-        // cout << output_file << endl;
-        // for (auto& p : pList) {
-        //     if (p != NULL) {
-        //         cout << *p << endl;
-        //     }
-        // }
-        // if (pList.size() == 1 && pList[0] == NULL) {
-        //     DEBUG("here");
-        //     continue;
-        // }
-        // continue;
-
-        // if (pList.size() == 1 && pList[0] == NULL) {
-        //     // DEBUG("here");
-        //     cout << "Error while parsing command" << endl;
-        //     continue;
-        // } else 
-*/

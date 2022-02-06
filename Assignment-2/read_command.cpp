@@ -1,10 +1,16 @@
+#include "read_command.h"
+
 #include <termios.h>
 #include <unistd.h>
 
 #include <algorithm>
 #include <cstdio>
+#include <iostream>
+#include <set>
 
-#include "header.h"
+#include "autocomplete.h"
+#include "history.h"
+
 using namespace std;
 
 extern bool ctrlC, ctrlZ, ctrlD;
@@ -71,8 +77,8 @@ string readCommand() {
         c = getchar();
         if (c == CTRL_R) {  // ctrl + r
             printf("\n");
-            printf("Enter search term: "); // should i print buf here?
-            string s; // = buf;
+            printf("Enter search term: ");
+            string s;
             while (1) {
                 char ch = getchar();
                 ret_in = handleChar(ch, s);
@@ -93,9 +99,8 @@ string readCommand() {
             if (cmds.size() == 0) {
                 printf("No match for search term in history\n");
                 displayPrompt();
-                // should s reappear in the prompt?
-            } else if (cmds.size() == 1) {
-                printf("Exact match found\n");
+            } else if (cmds.size() == 1 && cmds[0] == s) {  // exact match
+                printf("Exact match found in history: %s\n", cmds[0].c_str());
                 displayPrompt();
                 buf = cmds[0];
                 printf("%s", buf.c_str());
@@ -105,12 +110,15 @@ string readCommand() {
                     printf("%s\n", cmds[i].c_str());
                 }
                 displayPrompt();
-                // should i display buf?
             }
 
         } else if (c == TAB) {  // tab
             string s;
-            for (int j = buf.length() - 1; j >= 0 && buf[j] != ' ' && buf[j] != '/'; j--) {
+            set<char> delims = {' ', '\t', '/', '>', '<', '|'};
+            for (int j = (int)buf.length() - 1; j >= 0; j--) {
+                if (delims.find(buf[j]) != delims.end()) {
+                    break;
+                }
                 s += buf[j];
             }
             reverse(s.begin(), s.end());
