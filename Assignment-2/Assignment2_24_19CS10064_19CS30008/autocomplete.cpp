@@ -8,7 +8,7 @@
 
 using namespace std;
 
-// Returns a vector of strings containing the names of all files in the current directory.
+// Returns a vector of strings containing the names of all files in the current directory
 vector<string> getFilesInCurrDir() {
     vector<string> files;
     DIR* dir = opendir(".");

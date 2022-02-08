@@ -49,7 +49,7 @@ int handleChar(char c, string& buf) {
     } else if (c == ENTER) {  // Enter
         printf("\n");
         return 1;
-    } else if (c > 31 && c < 127) {  // Printable
+    } else if (c > 31 && c < 127) {  // Printable characters
         printf("%c", c);
         buf += c;
         return 0;
@@ -65,7 +65,7 @@ string readCommand() {
     // Get the terminal settings for stdin
     tcgetattr(STDIN_FILENO, &old_tio);
 
-    // We want to keep the old setting to restore them a the end
+    // We want to keep the old setting to restore them at the end
     new_tio = old_tio;
 
     // Disable canonical mode (bufered i/o) and local echo

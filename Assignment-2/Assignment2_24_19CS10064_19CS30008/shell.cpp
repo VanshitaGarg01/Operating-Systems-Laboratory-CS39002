@@ -23,7 +23,7 @@ using namespace std;
 bool ctrlC = 0, ctrlZ = 0, ctrlD = 0;  // Indicates whether the user has pressed Ctrl-C, Ctrl-Z, or Ctrl-D
 pid_t fgpid = 0;                       // Foreground process group id
 
-vector<Pipeline*> all_pipelines;  // To store all the pipleines in the shell
+vector<Pipeline*> all_pipelines;  // To store all the pipelines in the shell
 map<pid_t, int> ind;              // Mapping process id to index in the vector
 
 // To handle the cd builitin
@@ -98,7 +98,7 @@ int main() {
     // Reference: https://web.archive.org/web/20170701052127/https://www.usna.edu/Users/cs/aviv/classes/ic221/s16/lab/10/lab.html
     signal(SIGTTOU, SIG_IGN);
 
-    // Reference: https://web.archive.org/web/20170701052127/https://www.usna.edu/Users/cs/aviv/classes/ic221/s16/lab/10/lab.html
+    // Reference: https://web.stanford.edu/class/archive/cs/cs110/cs110.1206/lectures/07-races-and-deadlock-slides.pdf
     signal(SIGCHLD, reapProcesses);
 
     while (!ctrlD) {

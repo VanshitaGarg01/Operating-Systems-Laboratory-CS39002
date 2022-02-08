@@ -10,7 +10,7 @@
 using namespace std;
 
 // Reference: https://web.stanford.edu/class/archive/cs/cs110/cs110.1206/lectures/07-races-and-deadlock-slides.pdf
-// Signal handler for SIGCHILD
+// Signal handler for SIGCHILD to prevent zombie processes
 void reapProcesses(int signum) {
     while (true) {
         int status;
@@ -64,7 +64,6 @@ void blockSIGCHLD() {
 void unblockSIGCHLD() {
     toggleSIGCHLDBlock(SIG_UNBLOCK);
 }
-
 
 // Ensures no race conditions for foreground processes
 void waitForForegroundProcess(pid_t pid) {

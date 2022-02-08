@@ -43,9 +43,9 @@ vector<string> searchInHistory(string s) {
             j++;
             lps[i] = j;
             if (lps[i] == (int)s.size()) {
-                if (s.size() == hist_cmd.size()) {  // exact match
+                if (s.size() == hist_cmd.size()) {  // Exact match
                     return vector<string>(1, hist_cmd);
-                } else {  // subsrting match
+                } else {  // Substring match
                     commands.push_back(hist_cmd);
                 }
             }

@@ -22,7 +22,7 @@ void Pipeline::parse() {
         this->is_bg = true;
         this->cmd.pop_back();
     }
-    vector<string> piped_cmds = split(this->cmd, '|');
+    vector<string> piped_cmds = split(this->cmd, '|');  // First, split the command on the basis of '|'
 
     try {
         vector<Command*> cmds;
@@ -51,7 +51,7 @@ void Pipeline::executePipeline(bool isMultiwatch) {
     pid_t fg_pgid = 0;
     int new_pipe[2], old_pipe[2];
 
-    blockSIGCHLD();
+    blockSIGCHLD();  // Block SIGCHLD signal to avoid race conditions
 
     int cmds_size = this->cmds.size();
     for (int i = 0; i < cmds_size; i++) {
@@ -76,8 +76,8 @@ void Pipeline::executePipeline(bool isMultiwatch) {
             if (i == 0) {
                 fg_pgid = getpid();  // Get the pid of the first process to be set as the group id of all others in the pipeline
             }
-            if (isMultiwatch && i + 1 == cmds_size) {  // Create the tmp file in case of multiEatch
-                this->cmds[i]->output_file = ".tmp" + to_string(fg_pgid) + ".txt";
+            if (isMultiwatch && i + 1 == cmds_size) {  // Create the tmp file in case of multiWatch
+                this->cmds[i]->output_file = ".tmp." + to_string(fg_pgid) + ".txt";
             }
             this->cmds[i]->io_redirect();
 

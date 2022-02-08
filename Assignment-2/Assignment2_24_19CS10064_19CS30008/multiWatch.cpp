@@ -15,9 +15,10 @@ int inotify_fd;           // The inotify instance to monitor the file descriptor
 map<pid_t, int> pgid_wd;  // Map process group id to watch descriptor
 map<int, int> wd_ind;     // Map watch descriptor to index in the vector
 
+// Creates pipelines for all commands inside quotes for multiWatch
 vector<Pipeline*> parseMultiWatch(string cmd, string& output_file) {
     trim(cmd);
-    if (cmd.length() < 10) {  // Not multiwatch
+    if (cmd.length() < 10) {  // Not multiWatch
         return vector<Pipeline*>();
     }
     vector<Pipeline*> pipelines;
@@ -87,6 +88,7 @@ vector<Pipeline*> parseMultiWatch(string cmd, string& output_file) {
     return pipelines;
 }
 
+// Executes the multiWatch command by creating an inotify instance and monitoring the tmp files for output
 void executeMultiWatch(vector<Pipeline*>& pList, string output_file) {
     inotify_fd = inotify_init();  // Initialize inotify instance
     if (inotify_fd < 0) {
@@ -97,7 +99,7 @@ void executeMultiWatch(vector<Pipeline*>& pList, string output_file) {
     vector<int> fds;  // To store file descriptos from the tmp files to read
     for (int i = 0; i < (int)pList.size(); i++) {
         pList[i]->executePipeline(true);
-        string tmpFile = ".tmp" + to_string(pList[i]->pgid) + ".txt";
+        string tmpFile = ".tmp." + to_string(pList[i]->pgid) + ".txt";
         int fd = open(tmpFile.c_str(), O_RDONLY);
         if (fd < 0) {
             // Handle race condition of file not being already created in the child process
@@ -115,8 +117,8 @@ void executeMultiWatch(vector<Pipeline*>& pList, string output_file) {
             perror("inotify_add_watch");
             throw ShellException("Unable to add watch");
         }
-        pgid_wd[pList[i]->pgid] = wd;
-        wd_ind[wd] = i;
+        pgid_wd[pList[i]->pgid] = wd;  // Map process group id to watch descriptor
+        wd_ind[wd] = i;                // Map watch descriptor to index in the vector
     }
 
     int num_running = pList.size();
@@ -171,7 +173,7 @@ void executeMultiWatch(vector<Pipeline*>& pList, string output_file) {
                 }
             }
             if (event->mask & IN_IGNORED) {
-                // If the watch descriptor has been removed, that means the process has finished
+                // The watch descriptor is removed in the signal handler when the process is finished and IN_IGNORED is set
                 num_running--;
                 close(fds[wd_ind[event->wd]]);
             }
@@ -181,7 +183,7 @@ void executeMultiWatch(vector<Pipeline*>& pList, string output_file) {
 
     // Delete the tmp files
     for (auto it = pgid_wd.begin(); it != pgid_wd.end(); it++) {
-        string tmpFile = ".tmp" + to_string(it->first) + ".txt";
+        string tmpFile = ".tmp." + to_string(it->first) + ".txt";
         if (remove(tmpFile.c_str()) < 0) {
             perror("remove");
             throw ShellException("Unable to remove tmp file");

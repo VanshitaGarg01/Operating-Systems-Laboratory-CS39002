@@ -17,7 +17,7 @@ class Pipeline {
     string cmd;             // The pipeline command as a string
     vector<Command*> cmds;  // The component commands
     bool is_bg;             // Whether the pipeline is a background process
-    pid_t pgid;             // The process group ID of processes the pipeline
+    pid_t pgid;             // The process group ID of processes in the pipeline
     int num_active;         // The number of active processes in the pipeline
     int status;             // The status of the pipeline - RUNNING, STOPPED, or DONE
 
