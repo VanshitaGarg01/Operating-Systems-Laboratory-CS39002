@@ -15,6 +15,7 @@ using namespace std;
 
 extern bool ctrlC, ctrlZ, ctrlD;
 
+// Displays the prompt for the shell
 void displayPrompt() {
     char buf[DIR_LENGTH];
     getcwd(buf, DIR_LENGTH);
@@ -23,8 +24,9 @@ void displayPrompt() {
     cout << COLOR_GREEN << "vash: " << COLOR_BLUE << dir << COLOR_RESET << "$ ";
 }
 
+// Performs necessay actions for each character input
 int handleChar(char c, string& buf) {
-    if (c == CTRL_CZ) {  // ctrl + C, ctrl + Z
+    if (c == CTRL_CZ) {  // Ctrl + C, Ctrl + Z
         if (ctrlC) {
             printf("\n");
             buf = "";
@@ -34,20 +36,20 @@ int handleChar(char c, string& buf) {
             ctrlZ = 0;
             return 0;
         }
-    } else if (c == CTRL_D) {  // ctrl + D
+    } else if (c == CTRL_D) {  // Ctrl + D
         ctrlD = 1;
         buf = "";
         return 4;
-    } else if (c == BACKSPACE) {  // backspace
+    } else if (c == BACKSPACE) {  // Backspace
         if (buf.length() > 0) {
             printf("\b \b");
             buf.pop_back();
         }
         return 0;
-    } else if (c == ENTER) {  // enter
+    } else if (c == ENTER) {  // Enter
         printf("\n");
         return 1;
-    } else if (c > 31 && c < 127) {  // printable
+    } else if (c > 31 && c < 127) {  // Printable
         printf("%c", c);
         buf += c;
         return 0;
@@ -55,27 +57,30 @@ int handleChar(char c, string& buf) {
     return 0;
 }
 
+// Reads a command from the user (with autocomplete and history search)
 string readCommand() {
     struct termios old_tio, new_tio;
     signed char c;
 
-    /* get the terminal settings for stdin */
+    // Get the terminal settings for stdin
     tcgetattr(STDIN_FILENO, &old_tio);
 
-    /* we want to keep the old setting to restore them a the end */
+    // We want to keep the old setting to restore them a the end
     new_tio = old_tio;
 
-    /* disable canonical mode (bufered i/o) and local echo */
+    // Disable canonical mode (bufered i/o) and local echo
     new_tio.c_lflag &= (~ICANON & ~ECHO);
     new_tio.c_cc[VMIN] = 1;
     new_tio.c_cc[VTIME] = 0;
-    /* set the new settings immediately */
+
+    // Set the new settings immediately
     tcsetattr(STDIN_FILENO, TCSANOW, &new_tio);
+
     string buf;
     while (1) {
         int ret_in, ret_out;
         c = getchar();
-        if (c == CTRL_R) {  // ctrl + r
+        if (c == CTRL_R) {  // Ctrl + R (history search)
             printf("\n");
             printf("Enter search term: ");
             string s;
@@ -86,11 +91,11 @@ string readCommand() {
                     break;
                 }
             }
-            if (ret_in == 4) {  // ctrl + D
+            if (ret_in == 4) {  // Ctrl + D
                 ctrlD = 0;
                 buf = "";
                 break;
-            } else if (ret_in == 2) {  // ctrl + C
+            } else if (ret_in == 2) {  // Ctrl + C
                 buf = "";
                 break;
             }
@@ -112,10 +117,10 @@ string readCommand() {
                 displayPrompt();
             }
 
-        } else if (c == TAB) {  // tab
+        } else if (c == TAB) {  // Tab (auto completion)
             string s;
             set<char> delims = {' ', '\t', '/', '>', '<', '|'};
-            for (int j = (int)buf.length() - 1; j >= 0; j--) {
+            for (int j = (int)buf.length() - 1; j >= 0; j--) {  // Extract the last word
                 if (delims.find(buf[j]) != delims.end()) {
                     break;
                 }
@@ -135,7 +140,7 @@ string readCommand() {
                     printf("%d. %s ", j + 1, complete_options[j].c_str());
                 }
                 printf("\n");
-                printf("Enter choice: ");
+                printf("Enter choice: ");  // Take choice as input in case of multiple options
                 string n;
                 while (1) {
                     char ch = getchar();
@@ -144,11 +149,11 @@ string readCommand() {
                         break;
                     }
                 }
-                if (ret_in == 4) {  // ctrl + D
+                if (ret_in == 4) {  // Ctrl + D
                     ctrlD = 0;
                     buf = "";
                     break;
-                } else if (ret_in == 2) {  // ctrl + C
+                } else if (ret_in == 2) {  // Ctrl + C
                     buf = "";
                     break;
                 }
@@ -173,7 +178,8 @@ string readCommand() {
         }
     }
 
-    /* restore the former settings */
+    // Restore the former settings
     tcsetattr(STDIN_FILENO, TCSANOW, &old_tio);
+
     return buf;
 }

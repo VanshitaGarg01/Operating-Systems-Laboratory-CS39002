@@ -20,12 +20,13 @@
 
 using namespace std;
 
-bool ctrlC = 0, ctrlZ = 0, ctrlD = 0;
-pid_t fgpid = 0;
+bool ctrlC = 0, ctrlZ = 0, ctrlD = 0;  // Indicates whether the user has pressed Ctrl-C, Ctrl-Z, or Ctrl-D
+pid_t fgpid = 0;                       // Foreground process group id
 
-vector<Pipeline*> all_pipelines;
-map<pid_t, int> ind;
+vector<Pipeline*> all_pipelines;  // To store all the pipleines in the shell
+map<pid_t, int> ind;              // Mapping process id to index in the vector
 
+// To handle the cd builitin
 void shellCd(string arg) {
     trim(arg);
     if (arg == "") {
@@ -36,11 +37,13 @@ void shellCd(string arg) {
     }
 }
 
+// To handle the exit builitin - exits the shell
 void shellExit(string arg) {
     updateHistory();
     exit(0);
 }
 
+// To handle the jobs bulitin - lists all the jobs
 void shellJobs(string arg) {
     for (int i = 0; i < (int)all_pipelines.size(); i++) {
         cout << "pgid: " << all_pipelines[i]->pgid << ": ";
@@ -64,6 +67,7 @@ void shellJobs(string arg) {
 vector<string> builtins = {"cd", "exit", "jobs"};
 void (*builtin_funcs[])(string args) = {&shellCd, &shellExit, &shellJobs};
 
+// Handles the builtin commands - cd, exit, jobs
 void handleBuiltin(Pipeline& p) {
     try {
         string cmd = p.cmds[0]->args[0];
@@ -79,10 +83,10 @@ void handleBuiltin(Pipeline& p) {
 }
 
 int main() {
-    // perform bootup tasks, like loading history into deque
+    // Loading history when shell starts
     loadHistory();
 
-    // add signal handlers
+    // Specify signal handlers
     struct sigaction action;
     action.sa_handler = CZ_handler;
     sigemptyset(&action.sa_mask);
@@ -90,9 +94,11 @@ int main() {
 
     sigaction(SIGINT, &action, NULL);
     sigaction(SIGTSTP, &action, NULL);
+
+    // Reference: https://web.archive.org/web/20170701052127/https://www.usna.edu/Users/cs/aviv/classes/ic221/s16/lab/10/lab.html
     signal(SIGTTOU, SIG_IGN);
 
-    // https://web.archive.org/web/20170701052127/https://www.usna.edu/Users/cs/aviv/classes/ic221/s16/lab/10/lab.html
+    // Reference: https://web.archive.org/web/20170701052127/https://www.usna.edu/Users/cs/aviv/classes/ic221/s16/lab/10/lab.html
     signal(SIGCHLD, reapProcesses);
 
     while (!ctrlD) {
@@ -106,16 +112,19 @@ int main() {
 
         try {
             string output_file = "";
-            vector<Pipeline*> pList = parseMultiWatch(cmd, output_file);
-            if (pList.size() > 0) {  // multiWatch
+            vector<Pipeline*> pList = parseMultiWatch(cmd, output_file);  // Try parsing for multiWatch
+            if (pList.size() > 0) {                                       // multiWatch detected
+                // Change signal handlers in case of multiWatch
                 struct sigaction multiWatch_action;
                 multiWatch_action.sa_handler = multiWatch_SIGINT;
                 sigemptyset(&multiWatch_action.sa_mask);
                 multiWatch_action.sa_flags = 0;
                 sigaction(SIGINT, &multiWatch_action, NULL);
                 signal(SIGTSTP, SIG_IGN);
+                
                 executeMultiWatch(pList, output_file);
-                // revert back
+
+                // Revert back to signal handlers for the shell
                 sigaction(SIGINT, &action, NULL);
                 sigaction(SIGTSTP, &action, NULL);
             } else {
@@ -129,11 +138,13 @@ int main() {
                     handleBuiltin(*p);
                     continue;
                 }
-                p->executePipeline();
+                p->executePipeline();   // Execute the pipeline
             }
         } catch (ShellException& e) {
             cout << e.what() << endl;
         }
     }
+
+    // Save history when shell exits
     updateHistory();
 }

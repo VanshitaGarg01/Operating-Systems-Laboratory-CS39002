@@ -4,5 +4,5 @@ x=10
 sleep 1
 for ((i=0; i < $x; i++)); do
     echo $i
-    # sleep 1
+    sleep 1
 done

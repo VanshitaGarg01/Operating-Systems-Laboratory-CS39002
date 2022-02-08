@@ -5,6 +5,7 @@
 
 using namespace std;
 
+// Removes whitespaces from beginning and end of a string
 void trim(string& s) {
     while (s.length() && s.back() == ' ') {
         s.pop_back();
@@ -16,6 +17,7 @@ void trim(string& s) {
     s = s.substr(i);
 }
 
+// Splits an input string on the basis of a delimiter
 vector<string> split(string& str, char delim) {
     vector<string> tokens;
     stringstream ss(str);
@@ -26,6 +28,7 @@ vector<string> split(string& str, char delim) {
     return tokens;
 }
 
+// Converts a vector of strings to a vector of char*
 vector<char*> cstrArray(vector<string>& args) {
     vector<char*> args_(args.size() + 1);
     for (int i = 0; i < (int)args.size(); i++) {

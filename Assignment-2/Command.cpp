@@ -1,8 +1,9 @@
 #include "Command.h"
-#include "ShellException.h"
 
 #include <fcntl.h>
 #include <unistd.h>
+
+#include "ShellException.h"
 
 using namespace std;
 
@@ -17,11 +18,12 @@ Command::~Command() {
     }
 }
 
+// Parses the command string into a vector of arguments
 void Command::parse() {
     vector<string> tokens;
     string temp = "";
     for (size_t i = 0; i < cmd.length(); i++) {
-        if (cmd[i] == '\\') {
+        if (cmd[i] == '\\') {  // Escape character
             i++;
             if (i != cmd.length()) {
                 temp += cmd[i];
@@ -58,21 +60,21 @@ void Command::parse() {
     }
 
     for (size_t i = 0; i < tokens.size(); i++) {
-        if (tokens[i] == "<") {
+        if (tokens[i] == "<") {  // Input redirection
             i++;
             if (i == tokens.size() || tokens[i] == ">" || tokens[i] == "<" || tokens[i] == "&") {
                 throw ShellException("Unable to parse after '<'");
             } else {
                 input_file = tokens[i];
             }
-        } else if (tokens[i] == ">") {
+        } else if (tokens[i] == ">") {  // Output redirection
             i++;
             if (i == tokens.size() || tokens[i] == ">" || tokens[i] == "<" || tokens[i] == "&") {
                 throw ShellException("Unable to parse after '>'");
             } else {
                 output_file = tokens[i];
             }
-        } else if (tokens[i] == "&") {
+        } else if (tokens[i] == "&") {  // & is already parsed at the pipeline parsing stage
             throw ShellException("Unable to parse after '&'");
         } else {
             args.push_back(tokens[i]);
@@ -80,6 +82,7 @@ void Command::parse() {
     }
 }
 
+// Change the I/O file descriptors for redirection
 void Command::io_redirect() {
     if (input_file != "") {
         fd_in = open(input_file.c_str(), O_RDONLY);

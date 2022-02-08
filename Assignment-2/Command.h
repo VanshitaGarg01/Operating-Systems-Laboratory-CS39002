@@ -9,11 +9,11 @@ using namespace std;
 
 class Command {
    public:
-    string cmd;
-    vector<string> args;
-    int fd_in, fd_out;
-    string input_file, output_file;
-    pid_t pid;
+    string cmd;                      // The command as a string
+    vector<string> args;             // List of arguments in the command
+    int fd_in, fd_out;               // Input and output file descriptors
+    string input_file, output_file;  // Input and output filenames
+    pid_t pid;                       // Process ID of the command when it executes
 
     Command(const string& cmd);
     ~Command();

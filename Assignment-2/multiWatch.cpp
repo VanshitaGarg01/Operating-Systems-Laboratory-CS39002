@@ -11,13 +11,13 @@
 
 using namespace std;
 
-int inotify_fd;
-map<pid_t, int> pgid_wd;
-map<int, int> wd_ind;
+int inotify_fd;           // The inotify instance to monitor the file descriptors
+map<pid_t, int> pgid_wd;  // Map process group id to watch descriptor
+map<int, int> wd_ind;     // Map watch descriptor to index in the vector
 
 vector<Pipeline*> parseMultiWatch(string cmd, string& output_file) {
     trim(cmd);
-    if (cmd.length() < 10) {  // not multiwatch
+    if (cmd.length() < 10) {  // Not multiwatch
         return vector<Pipeline*>();
     }
     vector<Pipeline*> pipelines;
@@ -33,6 +33,7 @@ vector<Pipeline*> parseMultiWatch(string cmd, string& output_file) {
                 if (i == -1) {
                     throw ShellException("Could not find ']");
                 } else {
+                    // Extract output filename if present
                     output_file = cmd.substr(i + 1);
                     cmd = cmd.substr(0, i + 1);
                     trim(output_file);
@@ -67,7 +68,7 @@ vector<Pipeline*> parseMultiWatch(string cmd, string& output_file) {
                 }
                 for (auto& command : commands) {
                     if (command != "") {
-                        Pipeline* p = new Pipeline(command);
+                        Pipeline* p = new Pipeline(command);  // Create a pipeline for each string inside quotes
                         p->parse();
                         pipelines.push_back(p);
                     } else {
@@ -81,24 +82,25 @@ vector<Pipeline*> parseMultiWatch(string cmd, string& output_file) {
             throw ShellException("No commands after multiWatch");
         }
     } else {
-        return vector<Pipeline*>();
+        return vector<Pipeline*>();  // Signifies multiWatch is not present
     }
     return pipelines;
 }
 
 void executeMultiWatch(vector<Pipeline*>& pList, string output_file) {
-    inotify_fd = inotify_init();
+    inotify_fd = inotify_init();  // Initialize inotify instance
     if (inotify_fd < 0) {
         perror("inotify_init");
         throw ShellException("Unable to create inotify instance");
     }
 
-    vector<int> fds;
+    vector<int> fds;  // To store file descriptos from the tmp files to read
     for (int i = 0; i < (int)pList.size(); i++) {
         pList[i]->executePipeline(true);
         string tmpFile = ".tmp" + to_string(pList[i]->pgid) + ".txt";
         int fd = open(tmpFile.c_str(), O_RDONLY);
         if (fd < 0) {
+            // Handle race condition of file not being already created in the child process
             int temp_fd = open(tmpFile.c_str(), O_CREAT, 0644);
             if (temp_fd < 0) {
                 perror("open");
@@ -108,7 +110,7 @@ void executeMultiWatch(vector<Pipeline*>& pList, string output_file) {
             fd = open(tmpFile.c_str(), O_RDONLY);
         }
         fds.push_back(fd);
-        int wd = inotify_add_watch(inotify_fd, tmpFile.c_str(), IN_MODIFY);
+        int wd = inotify_add_watch(inotify_fd, tmpFile.c_str(), IN_MODIFY);  // Add watch descriptor to inotify instance
         if (wd < 0) {
             perror("inotify_add_watch");
             throw ShellException("Unable to add watch");
@@ -123,6 +125,7 @@ void executeMultiWatch(vector<Pipeline*>& pList, string output_file) {
     if (output_file == "") {
         out_fp = stdout;
     } else {
+        // Open output file for writing (if anything other than stdout)
         out_fp = fopen(output_file.c_str(), "w");
         if (out_fp == NULL) {
             perror("fopen");
@@ -136,18 +139,21 @@ void executeMultiWatch(vector<Pipeline*>& pList, string output_file) {
 
     char buf[1024];
 
+    // Continue watching the file descriptors until all processes are done
     while (num_running) {
-        int num_read = read(inotify_fd, event_buf, sizeof(event_buf));
+        int num_read = read(inotify_fd, event_buf, sizeof(event_buf));  // Get the next event
         if (num_read < 0 && errno != EINTR && errno != EBADF) {
             perror("read");
             throw ShellException("Unable to read from inotify instance");
-        } else if (errno == EBADF) {
+        } else if (errno == EBADF) {  // When inotify instance has been closed
             break;
         }
 
         int i = 0;
         while (i < num_read) {
             struct inotify_event* event = (struct inotify_event*)&event_buf[i];
+            // IN_MODIFY implies something has been written to the file
+            // IN_IGNORED implies the watch desriptor was removed from the watch list
             if ((event->mask & IN_MODIFY) || (event->mask & IN_IGNORED)) {
                 int fd = fds[wd_ind[event->wd]];
                 int len, seen_data = 0;
@@ -160,11 +166,12 @@ void executeMultiWatch(vector<Pipeline*>& pList, string output_file) {
                         seen_data = 1;
                     }
                     buf[len] = '\0';
-                    fprintf(out_fp, "%s", buf);
+                    fprintf(out_fp, "%s", buf);  // Write to output file
                     fflush(out_fp);
                 }
             }
             if (event->mask & IN_IGNORED) {
+                // If the watch descriptor has been removed, that means the process has finished
                 num_running--;
                 close(fds[wd_ind[event->wd]]);
             }
@@ -172,6 +179,7 @@ void executeMultiWatch(vector<Pipeline*>& pList, string output_file) {
         }
     }
 
+    // Delete the tmp files
     for (auto it = pgid_wd.begin(); it != pgid_wd.end(); it++) {
         string tmpFile = ".tmp" + to_string(it->first) + ".txt";
         if (remove(tmpFile.c_str()) < 0) {
