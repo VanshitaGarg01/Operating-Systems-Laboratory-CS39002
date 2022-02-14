@@ -26,7 +26,7 @@ typedef struct _process_data {
     }
 } ProcessData;
 
-// Fucntion to print a matrix of size r x c 
+// Function to print a matrix of size r x c
 void print_matrix(double** mat, int r, int c) {
     cout << fixed << setprecision(4);
     cout << "[";
@@ -44,8 +44,10 @@ void print_matrix(double** mat, int r, int c) {
     return;
 }
 
-// Creates and returns a double matrix of size r x c 
-// filled with random double values in the shared memory
+/*
+    Creates and returns a double matrix of size r x c
+    filled with random double values in the shared memory
+*/
 double** get_matrix(int r, int c, int& shmid, int shmids[]) {
     // Create shared memory segment of size r * sizeof(double*)
     shmid = shmget(IPC_PRIVATE, r * sizeof(double*), IPC_CREAT | 0666);
@@ -65,8 +67,10 @@ double** get_matrix(int r, int c, int& shmid, int shmids[]) {
     return mat;
 }
 
-// Multiplies ith row of matrix A with jth column of matrix B, 
-// and stores the result in the cell C[i][j]
+/* 
+    Multiplies ith row of matrix A with jth column of matrix B,
+    and stores the result in the cell C[i][j]
+*/
 void* mult(void* arg) {
     ProcessData* data = (ProcessData*)arg;
     data->C[data->i][data->j] = 0;
@@ -76,11 +80,13 @@ void* mult(void* arg) {
     return NULL;
 }
 
-// Destroy a matrix in the shared memory by taking SHMIDs' input 
+/*
+    Destroy a matrix in the shared memory by taking SHMIDs' input
+*/
 void destroy(int shmid, int shmids[], int n, double**& mat) {
     for (int i = 0; i < n; i++) {
         // Detach the memory segment mat[i] from the address space of this process
-        shmdt(mat[i]); 
+        shmdt(mat[i]);
         // Mark the segment entified by shmids[i] to be destroyed
         shmctl(shmids[i], IPC_RMID, NULL);
     }
@@ -130,7 +136,7 @@ int main() {
         Create r1 * c2 processes, each process multiplies a row
         of matrix A with a column of matrix B, and stores the result in
         the appropriate cell of preallocated matrix C
-    */ 
+    */
     for (int i = 0; i < r1; i++) {
         for (int j = 0; j < c2; j++) {
             pid_t pid = fork();
@@ -152,24 +158,6 @@ int main() {
          << "Matrix C:" << endl;
     print_matrix(C, r1, c2);
     cout << endl;
-
-    // double mat[r1][c2];
-    // for (int i = 0; i < r1; i++) {
-    //     for (int j = 0; j < c2; j++) {
-    //         mat[i][j] = 0;
-    //         for (int k = 0; k < r2; k++) {
-    //             mat[i][j] += A[i][k] * B[k][j];
-    //         }
-    //     }
-    // }
-
-    // for (int i = 0; i < r1; i++) {
-    //     for (int j = 0; j < c2; j++) {
-    //         if (abs(mat[i][j] - C[i][j]) > 1e-5) {
-    //             cout << "Error: " << mat[i][j] << " != " << C[i][j] << endl;
-    //         }
-    //     }
-    // }
 
     // Destroy the shared memory segments
     destroy(shmid1, shmids_A, r1, A);
