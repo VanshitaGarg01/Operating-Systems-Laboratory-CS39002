@@ -145,6 +145,9 @@ int main() {
                 mult(data);
                 delete data;
                 exit(0);
+            } else if (pid < 0) {
+                perror("fork");
+                exit(1);
             }
         }
     }

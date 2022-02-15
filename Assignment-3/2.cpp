@@ -192,9 +192,7 @@ void worker(int num) {
 
             int a_ind = SHM->out;                  // Index of matrix A
             int b_ind = (a_ind + 1) % QUEUE_SIZE;  // Index of matrix B
-            pthread_mutex_unlock(&SHM->mutex);
 
-            pthread_mutex_lock(&SHM->mutex);
             // p is the block of matrix C which is to be updated
             int p = 2 * ((blocks.first & 2) + (blocks.second & 1));
 
@@ -258,10 +256,8 @@ void worker(int num) {
                 cout << endl
                      << "One step done" << endl;
             }
-            pthread_mutex_unlock(&SHM->mutex);
-        } else {
-            pthread_mutex_unlock(&SHM->mutex);
         }
+        pthread_mutex_unlock(&SHM->mutex);
     }
 }
 
@@ -341,7 +337,7 @@ int main() {
             // Calculate the time taken by the program
             auto duration = duration_cast<milliseconds>(end - start);
             // Print the time taken by the program
-            cout << "Time taken " << duration.count() << " ms" << endl;
+            cout << "Time taken: " << duration.count() << " ms" << endl;
             pthread_mutex_unlock(&SHM->mutex);
             pthread_mutex_destroy(&SHM->mutex);
             for (pid_t pid : producers) {
