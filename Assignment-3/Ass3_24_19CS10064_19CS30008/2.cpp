@@ -73,6 +73,25 @@ struct SharedMem {
 SharedMem *SHM;
 
 /*
+    Function to print a matrix
+*/
+void print_matrix(Job &job) {
+    cout << "Matrix: " << endl;
+    cout << "[";
+    for (int i = 0; i < N; i++) {
+        cout << "[";
+        for (int j = 0; j < N; j++) {
+            cout << job.mat[i][j];
+            if (j != N - 1) {
+                cout << ", ";
+            }
+        }
+        cout << (i != N - 1 ? "],\n" : "]");
+    }
+    cout << "]" << endl;
+}
+
+/*
     Prints the newly created job details to the console
 */
 void producer_out(Job &job) {
@@ -81,6 +100,7 @@ void producer_out(Job &job) {
     cout << "pid: " << getpid() << endl;
     cout << "job_created: " << SHM->job_created << endl;
     cout << "Matrix ID: " << job.mat_id << endl;
+    // print_matrix(job); // Uncomment to print the matrix
 }
 
 /*
@@ -113,8 +133,6 @@ void producer(int num) {
         Job job(num);
         for (int i = 0; i < N; i++) {
             for (int j = 0; j < N; j++) {
-                // job.mat[i][j] = (i == j ? 2 : 0);
-                // job.mat[i][j] = i + j;
                 job.mat[i][j] = rand() % 19 - 9;
             }
         }
@@ -265,9 +283,9 @@ int main() {
     srand(time(NULL));
 
     int NP, NW;
-    cout << "Enter number of producers: ";
+    cout << "Enter number of producers (NP): ";
     cin >> NP;
-    cout << "Enter number of workers: ";
+    cout << "Enter number of workers (NW): ";
     cin >> NW;
     cout << "Enter number of marices to multiply: ";
     cin >> MAX_JOBS;
