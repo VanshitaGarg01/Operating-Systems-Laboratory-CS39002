@@ -18,6 +18,7 @@ using namespace std;
 
 #define ERROR(msg, ...) printf("\033[1;31m[ERROR] " msg " \033[0m\n", ##__VA_ARGS__);
 #define SUCCESS(msg, ...) printf("\033[1;36m[SUCCESS] " msg " \033[0m\n", ##__VA_ARGS__);
+#define INFO(msg, ...) printf("\033[1;32m[INFO] " msg " \033[0m\n", ##__VA_ARGS__);
 #define DEBUG(msg, ...) printf("\033[1;34m[DEBUG] " msg " \033[0m\n", ##__VA_ARGS__);
 #define PROMPT(msg, ...) printf("\033[1;32m" msg "\033[0m", ##__VA_ARGS__);
 
@@ -144,9 +145,13 @@ struct SharedMem {
         }
         for (int i = 0; i < MAX_NODES; i++) {
             if (tree[i].status == DONE) {
+                LOCK(&tree[i].mutex);
                 tree[i] = node;
+                UNLOCK(&tree[i].mutex);
                 if (locked) {
+                    // INFO("Trying to acquire lock for node %d", i);
                     LOCK(&tree[i].mutex);
+                    // INFO("Acquired lock for node %d", i);
                 }
                 node_count++;
                 return i;
@@ -225,12 +230,12 @@ void *producer(void *arg) {
         auto curr = chrono::high_resolution_clock::now();
         auto diff = chrono::duration_cast<chrono::seconds>(curr - start);
         if (diff.count() >= runtime) {
-            DEBUG("Producer %d finished", ind);
+            INFO("Producer %d finished", ind);
             pthread_exit(NULL);
         }
 
         int par_pos = getRandomJob();
-        // DEBUG("Producer found random job: %d", par_pos);
+        // INFO("Producer found random job: %d", par_pos);
         if (par_pos == -1) {
             continue;
         }
@@ -247,7 +252,7 @@ void *producer(void *arg) {
         int status = shm->tree[par_pos].addChild(child_pos);
         if (status != -1) {
             shm->tree[child_pos].setParent(par_pos);
-            DEBUG("Producer %d added child %d to parent %d", ind, child_pos, par_pos);
+            INFO("Producer %d added child %d to parent %d", ind, child_pos, par_pos);
         } else {
             // cout << "Error: Failed to add child to parent" << endl;
             // ERROR("Producer %d failed to add child %d to parent %d", ind, child_pos, par_pos);
@@ -314,6 +319,7 @@ void *consumer(void *arg) {
 
         LOCK(&shm->mutex);
         shm->tree[leaf_pos].status = DONE;
+        shm->node_count--;
         int par_pos = shm->tree[leaf_pos].parent;
         DEBUG("Consumer %d finished leaf %d", ind, leaf_pos);
         UNLOCK(&shm->mutex);
