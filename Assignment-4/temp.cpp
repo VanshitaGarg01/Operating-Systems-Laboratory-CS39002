@@ -294,14 +294,13 @@ void *consumer(void *arg) {
     while (1) {
         // LC("%d lock: %d", __LINE__, ind);
         LOCK(&shm->tree[shm->root].mutex);
+        // LC("%d got lock: %d", __LINE__, ind);
         if (shm->tree[shm->root].status == DONE) {
             UNLOCK(&shm->tree[shm->root].mutex);
-            // LC("%d unlock: %d", __LINE__, ind);
             DEBUG("Consumer %d finished", ind);
             pthread_exit(NULL);
         }
         UNLOCK(&shm->tree[shm->root].mutex);
-        // LC("%d unlock: %d", __LINE__, ind);
 
         int leaf_pos = getLeaf(shm->root);
         if (leaf_pos == -1) {
@@ -312,25 +311,21 @@ void *consumer(void *arg) {
 
         shm->tree[leaf_pos].status = ONGOING;
         UNLOCK(&shm->tree[leaf_pos].mutex);
-        // LC("%d unlock: %d", __LINE__, ind);
         DEBUG("Consumer %d is working on leaf %d", ind, leaf_pos);
         usleep(shm->tree[leaf_pos].comp_time * 1000);
         
-        // LC("%d lock: %d", __LINE__, ind);
         LOCK(&shm->mutex);
         shm->tree[leaf_pos].status = DONE;
         shm->node_count--;
         int par_pos = shm->tree[leaf_pos].parent;
         DEBUG("Consumer %d finished leaf %d", ind, leaf_pos);
         UNLOCK(&shm->mutex);
-        // LC("%d unlock: %d", __LINE__, ind);
 
         if (leaf_pos == shm->root) {
             DEBUG("Root finished");
             continue;
         }
 
-        // LC("%d lock: %d", __LINE__, ind);
         LOCK(&shm->tree[par_pos].mutex);
         int status = shm->tree[par_pos].deleteChild(leaf_pos);
         if (status == -1) {
@@ -340,7 +335,6 @@ void *consumer(void *arg) {
             DEBUG("Consumer %d deleted child %d from parent %d", ind, leaf_pos, par_pos);
         }
         UNLOCK(&shm->tree[par_pos].mutex);
-        // LC("%d unlock: %d", __LINE__, ind);
     }
 }
 
@@ -348,7 +342,7 @@ int main() {
     signal(SIGINT, sigintHandler);
     signal(SIGSEGV, sigintHandler);
 
-    srand(42);
+    srand(time(NULL));
     int np, nc;
     cout << "Enter no. of producer threads: ";
     cin >> np;
@@ -388,7 +382,7 @@ int main() {
 
     pid_t b_pid = fork();
     if (b_pid == 0) {
-        srand(42);
+        srand(time(NULL));
         pthread_t cons[nc];
         for (int i = 0; i < nc; i++) {
             int *ind = new int(i);
@@ -411,10 +405,6 @@ int main() {
 
     INFO("np: %d, nc: %d, max_node_count: %d", np, nc, mx);
 
-    for(int i = 0; i < MAX_NODES; i++) {
-        pthread_mutex_destroy(&shm->tree[i].mutex);
-    }
-    pthread_mutex_destroy(&shm->mutex);
     shmdt(shm);
     shmctl(shmid, IPC_RMID, NULL);
 }
