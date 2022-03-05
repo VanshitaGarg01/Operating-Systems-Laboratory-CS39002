@@ -21,7 +21,7 @@ using namespace std;
 #define COLOR_BLUE "\033[1;34m"
 #define COLOR_RESET "\033[0m"
 
-const int MIN_INIT_NODES = 350;
+const int MIN_INIT_NODES = 300;
 const int MAX_INIT_NODES = 500;
 const int MAX_COMP_TIME = 250;
 const int MAX_CHILD_JOBS = 15;
