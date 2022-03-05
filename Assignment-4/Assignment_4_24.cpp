@@ -16,47 +16,46 @@
 
 using namespace std;
 
-#define ERROR(msg, ...) printf("\033[1;31m[ERROR] " msg " \033[0m\n", ##__VA_ARGS__);
-#define LC(msg, ...) printf("\033[1;36m[LC] " msg " \033[0m\n", ##__VA_ARGS__);
-#define INFO(msg, ...) printf("\033[1;32m[INFO] " msg " \033[0m\n", ##__VA_ARGS__);
-#define DEBUG(msg, ...) printf("\033[1;34m[DEBUG] " msg " \033[0m\n", ##__VA_ARGS__);
-#define PROMPT(msg, ...) printf("\033[1;32m" msg "\033[0m", ##__VA_ARGS__);
-
-#define LOCK(mutex_p)                                                            \
-    do {                                                                         \
-        int ret = pthread_mutex_lock(mutex_p);                                   \
-        if (ret != 0) {                                                          \
-            ERROR("%d: pthread_mutex_lock failed: %s", __LINE__, strerror(ret)); \
-            exit(1);                                                             \
-        }                                                                        \
-    } while (0)
-
-#define UNLOCK(mutex_p)                                                            \
-    do {                                                                           \
-        int ret = pthread_mutex_unlock(mutex_p);                                   \
-        if (ret != 0) {                                                            \
-            ERROR("%d: pthread_mutex_unlock failed: %s", __LINE__, strerror(ret)); \
-            exit(1);                                                               \
-        }                                                                          \
-    } while (0)
+#define COLOR_RED "\033[1;31m"
+#define COLOR_GREEN "\033[1;32m"
+#define COLOR_BLUE "\033[1;34m"
+#define COLOR_RESET "\033[0m"
 
 const int MIN_INIT_NODES = 350;
 const int MAX_INIT_NODES = 500;
-const int MAX_NODES = 5000;
 const int MAX_COMP_TIME = 250;
 const int MAX_CHILD_JOBS = 15;
 const int MAX_ID = (int)1e8;
 const int MIN_PROD_TIME = 10;
 const int MAX_PROD_TIME = 20;
+const int MIN_PROD_SLEEP = 200;
 const int MAX_PROD_SLEEP = 500;
 
-int mx = 0;
+int MAX_NODES;
 
 enum JobStatus {
     WAITING,
     ONGOING,
     DONE
 };
+
+// A wrapper around pthread_mutex_lock for error detection
+void LOCK(pthread_mutex_t *mutex) {
+    int status = pthread_mutex_lock(mutex);
+    if (status != 0) {
+        printf(COLOR_RED "%d: pthread_mutex_lock failed: %s\n" COLOR_RESET, __LINE__, strerror(status));
+        exit(1);
+    }
+}
+
+// A wrapper around pthread_mutex_unlock for error detection
+void UNLOCK(pthread_mutex_t *mutex) {
+    int status = pthread_mutex_unlock(mutex);
+    if (status != 0) {
+        printf(COLOR_RED "%d: pthread_mutex_unlock failed: %s\n" COLOR_RESET, __LINE__, strerror(status));
+        exit(1);
+    }
+}
 
 struct Node {
     int job_id;
@@ -78,6 +77,7 @@ struct Node {
         status = WAITING;
     }
 
+    // Implemeting the assignment operator to ensure the mutex doesn't get copied
     Node &operator=(const Node &node) {
         job_id = node.job_id;
         comp_time = node.comp_time;
@@ -90,6 +90,7 @@ struct Node {
         return *this;
     }
 
+    // Adds a child job to the node
     int addChild(int child_id) {
         for (int i = 0; i < MAX_CHILD_JOBS; i++) {
             if (child_jobs[i] == -1) {
@@ -101,10 +102,12 @@ struct Node {
         return -1;
     }
 
+    // Sets the parent link of a node
     void setParent(int parent_id) {
         parent = parent_id;
     }
 
+    // Deletes a child job from the node
     int deleteChild(int child_id) {
         for (int i = 0; i < MAX_CHILD_JOBS; i++) {
             if (child_jobs[i] == child_id) {
@@ -118,9 +121,9 @@ struct Node {
 };
 
 struct SharedMem {
-    Node tree[MAX_NODES];
-    int node_count;
-    int root;
+    Node *tree;      // The tree stored as an array of nodes
+    int node_count;  // Current number of nodes in the tree
+    int root;        // Root node of the tree
     pthread_mutex_t mutex;
 
     void init() {
@@ -141,23 +144,17 @@ struct SharedMem {
         pthread_mutex_init(&mutex, &attr);
     }
 
+    // Adds a new node to the tree
     int addNode(Node &node, bool locked = false) {
         if (node_count == MAX_NODES) {
-            ERROR("node_count == MAX_NODES");
             return -1;
         }
         for (int i = 0; i < MAX_NODES; i++) {
             if (tree[i].status == DONE) {
                 LOCK(&tree[i].mutex);
                 tree[i] = node;
-                // UNLOCK(&tree[i].mutex);
-                if (!locked) {
-                    // INFO("Trying to acquire lock for node %d", i);
-                    UNLOCK(&tree[i].mutex);
-                    // INFO("Acquired lock for node %d", i);
-                }
+                UNLOCK(&tree[i].mutex);
                 node_count++;
-                mx = max(mx, node_count);
                 return i;
             }
         }
@@ -166,12 +163,14 @@ struct SharedMem {
 };
 
 SharedMem *shm;
-int shmid;
+int shmid, shmtreeid;
 
+// Returns a random number between low and high
 int rand(int low, int high) {
     return low + rand() % (high - low + 1);
 }
 
+// Random tree generator
 void genInitialTree() {
     int n = rand(MIN_INIT_NODES, MAX_INIT_NODES);
     for (int i = 0; i < n; i++) {
@@ -182,16 +181,17 @@ void genInitialTree() {
                 shm->root = node_pos;
                 assert(shm->root == 0);
             } else {
+                // Assign the parent of a node i as any node from 0 to i - 1
                 int par = rand(0, node_pos - 1);
                 int status = shm->tree[par].addChild(node_pos);
                 if (status != -1) {
                     shm->tree[node_pos].setParent(par);
                 } else {
-                    cout << "Error: Failed to add child to parent" << endl;
+                    printf(COLOR_RED "Error: Failed to add child to parent\n" COLOR_RESET);
                 }
             }
         } else {
-            cout << "Error: Failed to add node to tree" << endl;
+            printf(COLOR_RED "Error: Failed to add node to tree\n" COLOR_RESET);
         }
     }
 }
@@ -204,73 +204,83 @@ void sigintHandler(int sig) {
     } else {
         cout << "Unknown signal" << endl;
     }
+    shmdt(shm->tree);
     shmdt(shm);
+    shmctl(shmtreeid, IPC_RMID, NULL);
     shmctl(shmid, IPC_RMID, NULL);
     exit(1);
 }
 
-int getRandomJob() {
-    for (int i = 0; i < MAX_NODES; i++) {
-        // TODO: may change choice logic
-        // double prob = (double)rand() / (double)RAND_MAX;
-        double prob = 0.5;
-        double x = (double)rand() / (double)RAND_MAX;
-        LOCK(&shm->tree[i].mutex);
-        if (shm->tree[i].status == WAITING && x < prob && shm->tree[i].child_count < MAX_CHILD_JOBS) {
-            // DEBUG("Random job found: %d", i);
-            return i;
+// Obtain a random job for the producer using DFS and a probability of selecting or rejecting a particular node
+int getRandomJob(int start) {
+    LOCK(&shm->tree[start].mutex);
+    if (shm->tree[start].status != WAITING) {
+        UNLOCK(&shm->tree[start].mutex);
+        return -1;
+    }
+    double p = 0.3;
+    double s = (double)rand() / RAND_MAX;
+
+    // Suitable node found
+    if (s < p && shm->tree[start].child_count < MAX_CHILD_JOBS) {
+        return start;
+    }
+    UNLOCK(&shm->tree[start].mutex);
+    for (int i = 0; i < MAX_CHILD_JOBS; i++) {
+        int childstart = shm->tree[start].child_jobs[i];
+        if (childstart != -1) {
+            int id = getRandomJob(childstart);
+            if (id != -1) {
+                return id;
+            }
         }
-        UNLOCK(&shm->tree[i].mutex);
     }
     return -1;
 }
 
+// The function for the producer threads to execute
 void *producer(void *arg) {
     int ind = *(int *)arg;
     int runtime = rand(MIN_PROD_TIME, MAX_PROD_TIME);
-    DEBUG("Producer %d: %d", ind, runtime);
+    printf(COLOR_GREEN "Producer %d started. Runtime %d seconds\n" COLOR_RESET, ind, runtime);
     auto start = chrono::high_resolution_clock::now();
     while (1) {
         auto curr = chrono::high_resolution_clock::now();
         auto diff = chrono::duration_cast<chrono::seconds>(curr - start);
+        // Check if it has executed for the specified number of seconds
         if (diff.count() >= runtime) {
-            INFO("Producer %d finished", ind);
+            printf(COLOR_GREEN "Producer %d finished\n" COLOR_RESET, ind);
             pthread_exit(NULL);
         }
 
-        int par_pos = getRandomJob();
-        // INFO("Producer found random job: %d", par_pos);
+        int par_pos = getRandomJob(shm->root);
         if (par_pos == -1) {
             continue;
         }
         Node node;
         LOCK(&shm->mutex);
-        int child_pos = shm->addNode(node, true);
+        int child_pos = shm->addNode(node);  // Add a new node to the tree
         UNLOCK(&shm->mutex);
         if (child_pos == -1) {
-            // ERROR("%d, Failed to add node to tree", __LINE__);
             UNLOCK(&shm->tree[par_pos].mutex);
-            // sleep(1);
             continue;
         }
-        int status = shm->tree[par_pos].addChild(child_pos);
+        int status = shm->tree[par_pos].addChild(child_pos);  // Set child link
         if (status != -1) {
-            shm->tree[child_pos].setParent(par_pos);
-            INFO("Producer %d added child %d to parent %d", ind, child_pos, par_pos);
-        } else {
-            // cout << "Error: Failed to add child to parent" << endl;
-            // ERROR("Producer %d failed to add child %d to parent %d", ind, child_pos, par_pos);
+            shm->tree[child_pos].setParent(par_pos);  // Set parent link
+            printf(COLOR_GREEN "Producer %d added child index %d to parent index %d. Job id: %d\n" COLOR_RESET, ind, child_pos, par_pos, node.job_id);
         }
-        UNLOCK(&shm->tree[child_pos].mutex);
         UNLOCK(&shm->tree[par_pos].mutex);
 
-        int sleep_time = rand(0, MAX_PROD_SLEEP);
+        int sleep_time = rand(MIN_PROD_SLEEP, MAX_PROD_SLEEP);
         usleep(sleep_time * 1000);
     }
 }
 
+// Obtain a job from a leaf of the tree for the consumer to be executed
 int getLeaf(int start) {
     LOCK(&shm->tree[start].mutex);
+    // Suitable node found
     if (shm->tree[start].child_count == 0 && shm->tree[start].status == WAITING) {
         return start;
     } else {
@@ -279,74 +289,61 @@ int getLeaf(int start) {
             if (shm->tree[start].child_jobs[i] != -1) {
                 int leaf_pos = getLeaf(shm->tree[start].child_jobs[i]);
                 if (leaf_pos != -1) {
-                    // UNLOCK(&shm->tree[start].mutex);
                     return leaf_pos;
                 }
             }
         }
-        // UNLOCK(&shm->tree[start].mutex);
         return -1;
     }
 }
 
+// The function for the consumer threads to execute
 void *consumer(void *arg) {
     int ind = *(int *)arg;
     while (1) {
-        // LC("%d lock: %d", __LINE__, ind);
         LOCK(&shm->tree[shm->root].mutex);
+        // If the root is done, that implies all jobs are completed, hence we can exit from the comsumer thread
         if (shm->tree[shm->root].status == DONE) {
             UNLOCK(&shm->tree[shm->root].mutex);
-            // LC("%d unlock: %d", __LINE__, ind);
-            DEBUG("Consumer %d finished", ind);
+            printf(COLOR_BLUE "Consumer %d finished\n" COLOR_RESET, ind);
             pthread_exit(NULL);
         }
         UNLOCK(&shm->tree[shm->root].mutex);
-        // LC("%d unlock: %d", __LINE__, ind);
 
         int leaf_pos = getLeaf(shm->root);
         if (leaf_pos == -1) {
             continue;
         }
 
-        DEBUG("Consumer %d found leaf %d", ind, leaf_pos);
-
-        shm->tree[leaf_pos].status = ONGOING;
+        shm->tree[leaf_pos].status = ONGOING;  // Change status to ONGOING
         UNLOCK(&shm->tree[leaf_pos].mutex);
-        // LC("%d unlock: %d", __LINE__, ind);
-        DEBUG("Consumer %d is working on leaf %d", ind, leaf_pos);
-        usleep(shm->tree[leaf_pos].comp_time * 1000);
-        
-        // LC("%d lock: %d", __LINE__, ind);
+        printf(COLOR_BLUE "Job at index %d started by consumer %d. Job id: %d\n" COLOR_RESET, leaf_pos, ind, shm->tree[leaf_pos].job_id);
+        usleep(shm->tree[leaf_pos].comp_time * 1000);  // Sleep for the required amount of time
+
         LOCK(&shm->mutex);
-        shm->tree[leaf_pos].status = DONE;
+        shm->tree[leaf_pos].status = DONE;  // Change status to DONE
         shm->node_count--;
         int par_pos = shm->tree[leaf_pos].parent;
-        DEBUG("Consumer %d finished leaf %d", ind, leaf_pos);
+        printf(COLOR_BLUE "Job at index %d completed. Job id: %d\n" COLOR_RESET, leaf_pos, shm->tree[leaf_pos].job_id);
         UNLOCK(&shm->mutex);
-        // LC("%d unlock: %d", __LINE__, ind);
 
         if (leaf_pos == shm->root) {
-            DEBUG("Root finished");
+            printf(COLOR_BLUE "Root finished\n" COLOR_RESET);
             continue;
         }
 
-        // LC("%d lock: %d", __LINE__, ind);
         LOCK(&shm->tree[par_pos].mutex);
-        int status = shm->tree[par_pos].deleteChild(leaf_pos);
+        int status = shm->tree[par_pos].deleteChild(leaf_pos);  // Delete child link
         if (status == -1) {
-            // cout << "Error: Failed to delete child from parent" << endl;
-            ERROR("Consumer %d failed to delete child %d from parent %d", ind, leaf_pos, par_pos);
-        } else {
-            DEBUG("Consumer %d deleted child %d from parent %d", ind, leaf_pos, par_pos);
+            printf(COLOR_RED "Error: Failed to delete child from parent\n" COLOR_RESET);
         }
         UNLOCK(&shm->tree[par_pos].mutex);
-        // LC("%d unlock: %d", __LINE__, ind);
     }
 }
 
 int main() {
-    signal(SIGINT, sigintHandler);
-    signal(SIGSEGV, sigintHandler);
+    // signal(SIGINT, sigintHandler);
+    // signal(SIGSEGV, sigintHandler);
 
     srand(42);
     int np, nc;
@@ -355,35 +352,40 @@ int main() {
     cout << "Enter no. of consumer threads: ";
     cin >> nc;
     if (np < 0) {
-        ERROR("No. of producer threads cannot be negative");
+        printf(COLOR_RED "No. of producer threads cannot be negative\n" COLOR_RESET);
         exit(1);
     }
     if (nc <= 0) {
-        ERROR("No. of consumer threads should be atleast 1");
+        printf(COLOR_RED "No. of consumer threads should be atleast 1\n" COLOR_RESET);
         exit(1);
     }
 
+    MAX_NODES = 100 * np + MAX_INIT_NODES;
+
     shmid = shmget(IPC_PRIVATE, sizeof(SharedMem), IPC_CREAT | 0666);
     shm = (SharedMem *)shmat(shmid, NULL, 0);
+    shmtreeid = shmget(IPC_PRIVATE, MAX_NODES * sizeof(Node), IPC_CREAT | 0666);
+    shm->tree = (Node *)shmat(shmtreeid, NULL, 0);
     shm->init();
 
     genInitialTree();
 
+    // Display the initial tree
     for (int i = 0; i < shm->node_count; i++) {
-        cout << "Node " << i;
-        cout << " -> ";
+        printf("Node %d", i);
+        printf(" -> ");
         for (int j = 0; j < MAX_CHILD_JOBS; j++) {
             if (shm->tree[i].child_jobs[j] != -1) {
-                cout << shm->tree[i].child_jobs[j] << ", ";
+                printf("%d ", shm->tree[i].child_jobs[j]);
             }
         }
-        cout << endl;
+        printf("\n");
     }
 
     pthread_t prods[np];
     for (int i = 0; i < np; i++) {
         int *ind = new int(i);
-        pthread_create(&prods[i], NULL, producer, ind);
+        pthread_create(&prods[i], NULL, producer, ind);  // Create producer threads
     }
 
     pid_t b_pid = fork();
@@ -392,8 +394,9 @@ int main() {
         pthread_t cons[nc];
         for (int i = 0; i < nc; i++) {
             int *ind = new int(i);
-            pthread_create(&cons[i], NULL, consumer, ind);
+            pthread_create(&cons[i], NULL, consumer, ind);  // Create consumer threads
         }
+        // Wait for consumers to complete
         for (int i = 0; i < nc; i++) {
             pthread_join(cons[i], NULL);
         }
@@ -403,18 +406,23 @@ int main() {
         exit(1);
     }
 
+    // Ensure all producers have stopped
     for (int i = 0; i < np; i++) {
         pthread_join(prods[i], NULL);
     }
 
+    // Wait for the process B to complete
     waitpid(b_pid, NULL, 0);
 
-    INFO("np: %d, nc: %d, max_node_count: %d", np, nc, mx);
-
-    for(int i = 0; i < MAX_NODES; i++) {
+    // Release mutex locks
+    for (int i = 0; i < MAX_NODES; i++) {
         pthread_mutex_destroy(&shm->tree[i].mutex);
     }
     pthread_mutex_destroy(&shm->mutex);
+
+    // Release shared memory
+    shmdt(shm->tree);
     shmdt(shm);
+    shmctl(shmtreeid, IPC_RMID, NULL);
     shmctl(shmid, IPC_RMID, NULL);
 }
