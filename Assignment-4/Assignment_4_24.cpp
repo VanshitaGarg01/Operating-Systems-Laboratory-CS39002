@@ -43,7 +43,7 @@ enum JobStatus {
 void LOCK(pthread_mutex_t *mutex) {
     int status = pthread_mutex_lock(mutex);
     if (status != 0) {
-        printf(COLOR_RED "%d: pthread_mutex_lock failed: %s\n" COLOR_RESET, __LINE__, strerror(status));
+        printf(COLOR_RED "pthread_mutex_lock failed: %s\n" COLOR_RESET, strerror(status));
         exit(1);
     }
 }
@@ -52,7 +52,7 @@ void LOCK(pthread_mutex_t *mutex) {
 void UNLOCK(pthread_mutex_t *mutex) {
     int status = pthread_mutex_unlock(mutex);
     if (status != 0) {
-        printf(COLOR_RED "%d: pthread_mutex_unlock failed: %s\n" COLOR_RESET, __LINE__, strerror(status));
+        printf(COLOR_RED "pthread_mutex_unlock failed: %s\n" COLOR_RESET, strerror(status));
         exit(1);
     }
 }
@@ -360,6 +360,8 @@ int main() {
         exit(1);
     }
 
+    // Min sleep time for each producer between addition of jobs is 200 ms
+    // So maximum no. of jobs 1 producer can add = 20s / 200ms = 100, hence np producers can add 100 * np jobs
     MAX_NODES = 100 * np + MAX_INIT_NODES;
 
     shmid = shmget(IPC_PRIVATE, sizeof(SharedMem), IPC_CREAT | 0666);
