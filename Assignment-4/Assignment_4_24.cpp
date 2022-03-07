@@ -42,6 +42,11 @@ enum JobStatus {
     DONE
 };
 
+// Returns a random number between low and high
+int rand(int low, int high) {
+    return low + rand() % (high - low + 1);
+}
+
 // A wrapper around pthread_mutex_lock for error detection
 void LOCK(pthread_mutex_t *mutex) {
     int status = pthread_mutex_lock(mutex);
@@ -70,8 +75,8 @@ struct Node {
     pthread_mutex_t mutex;
 
     Node() {
-        job_id = rand() % MAX_ID + 1;
-        comp_time = rand() % MAX_COMP_TIME + 1;
+        job_id = rand(1, MAX_ID);
+        comp_time = rand(0, MAX_COMP_TIME);
         for (int i = 0; i < MAX_CHILD_JOBS; i++) {
             child_jobs[i] = -1;
         }
@@ -174,11 +179,6 @@ struct SharedMem {
 SharedMem *shm;
 int shmid, shmtreeid;
 
-// Returns a random number between low and high
-int rand(int low, int high) {
-    return low + rand() % (high - low + 1);
-}
-
 // Random tree generator
 void genInitialTree() {
     int n = rand(MIN_INIT_NODES, MAX_INIT_NODES);
@@ -269,15 +269,17 @@ void *producer(void *arg) {
 
         int par_pos = getRandomJob(shm->root);
         if (par_pos == -1) {
+            usleep(5);
             continue;
         }
         Node node;
         node.setParent(par_pos);  // Set parent link
-        // LOCK(&shm->mutex);
+        LOCK(&shm->mutex);
         int child_pos = shm->addNode(node);  // Add a new node to the tree
-        // UNLOCK(&shm->mutex);
+        UNLOCK(&shm->mutex);
         if (child_pos == -1) {
             UNLOCK(&shm->tree[par_pos].mutex);
+            usleep(5);
             continue;
         }
         int status = shm->tree[par_pos].addChild(child_pos);  // Set child link
@@ -332,6 +334,7 @@ void *consumer(void *arg) {
 
         int leaf_pos = getLeaf(shm->root);
         if (leaf_pos == -1) {
+            usleep(5);
             continue;
         }
 
@@ -387,11 +390,8 @@ int main() {
     MAX_NODES = 100 * np + MAX_INIT_NODES;
 
     shmid = shmget(IPC_PRIVATE, sizeof(SharedMem), IPC_CREAT | 0666);
-    printf("shmid: %d\n", shmid);
     shm = (SharedMem *)shmat(shmid, NULL, 0);
-
     shmtreeid = shmget(IPC_PRIVATE, MAX_NODES * sizeof(Node), IPC_CREAT | 0666);
-    printf("shmtreeid: %d\n", shmtreeid);
     shm->tree = (Node *)shmat(shmtreeid, NULL, 0);
     shm->init();
 
