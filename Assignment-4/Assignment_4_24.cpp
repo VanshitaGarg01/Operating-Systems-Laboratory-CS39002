@@ -27,7 +27,7 @@ using namespace std;
 const int MIN_INIT_NODES = 300;
 const int MAX_INIT_NODES = 500;
 const int MAX_COMP_TIME = 250;
-const int MAX_CHILD_JOBS = 15;
+const int MAX_CHILD_JOBS = 20;
 const int MAX_ID = (int)1e8;
 const int MIN_PROD_TIME = 10;
 const int MAX_PROD_TIME = 20;
@@ -253,7 +253,7 @@ int getRandomJob(int start) {
 
 // The function for the producer threads to execute
 void *producer(void *arg) {
-    srand(42);
+    srand(time(NULL) * gettid());
     int ind = *(int *)arg;
     int runtime = rand(MIN_PROD_TIME, MAX_PROD_TIME);
     printf(COLOR_GREEN "Producer %d started. Runtime %d seconds\n" COLOR_RESET, ind, runtime);
@@ -319,7 +319,7 @@ int getLeaf(int start) {
 
 // The function for the consumer threads to execute
 void *consumer(void *arg) {
-    srand(42);
+    srand(time(NULL) * gettid());
     int ind = *(int *)arg;
     printf(COLOR_BLUE "Consumer %d started\n" COLOR_RESET, ind);
     while (1) {
@@ -370,7 +370,7 @@ int main() {
     signal(SIGINT, sigintHandler);
     signal(SIGSEGV, sigintHandler);
 
-    srand(42);
+    srand(time(NULL) * getpid());
     int np, nc;
     cout << "Enter no. of producer threads: ";
     cin >> np;
@@ -417,7 +417,7 @@ int main() {
 
     pid_t b_pid = fork();
     if (b_pid == 0) {
-        srand(42);
+        srand(time(NULL) * getpid());
         pthread_t cons[nc];
         for (int i = 0; i < nc; i++) {
             int *ind = new int(i);
