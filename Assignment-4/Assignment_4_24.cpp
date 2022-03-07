@@ -208,22 +208,6 @@ void genInitialTree() {
     }
 }
 
-void sigintHandler(int sig) {
-    if (sig == SIGSEGV) {
-        cout << gettid() << ": Segmentation fault" << endl;
-        cout << "Segmentation fault" << endl;
-    } else if (sig == SIGINT) {
-        cout << "Interrupt signal" << endl;
-    } else {
-        cout << "Unknown signal" << endl;
-    }
-    shmdt(shm->tree);
-    shmdt(shm);
-    shmctl(shmtreeid, IPC_RMID, NULL);
-    shmctl(shmid, IPC_RMID, NULL);
-    exit(1);
-}
-
 // Obtain a random job for the producer using DFS and a probability of selecting or rejecting a particular node
 int getRandomJob(int start) {
     LOCK(&shm->tree[start].mutex);
@@ -367,9 +351,6 @@ void *consumer(void *arg) {
 }
 
 int main() {
-    signal(SIGINT, sigintHandler);
-    signal(SIGSEGV, sigintHandler);
-
     srand(time(NULL) * getpid());
     int np, nc;
     cout << "Enter no. of producer threads: ";
