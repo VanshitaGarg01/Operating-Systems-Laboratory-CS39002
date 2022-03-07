@@ -60,24 +60,6 @@ void UNLOCK(pthread_mutex_t *mutex) {
     }
 }
 
-// #define LOCK(mutex_p)                                                                                        \
-//     do {                                                                                                     \
-//         int ret = pthread_mutex_lock(mutex_p);                                                               \
-//         if (ret != 0) {                                                                                      \
-//             printf(COLOR_RED "pthread_mutex_lock failed: %d, %s\n" COLOR_RESET, __LINE__, strerror(ret)); \
-//             exit(1);                                                                                         \
-//         }                                                                                                    \
-//     } while (0)
-
-// #define UNLOCK(mutex_p)                                                                                        \
-//     do {                                                                                                       \
-//         int ret = pthread_mutex_unlock(mutex_p);                                                               \
-//         if (ret != 0) {                                                                                        \
-//             printf(COLOR_RED "pthread_mutex_unlock failed: %d, %s\n" COLOR_RESET, __LINE__, strerror(ret)); \
-//             exit(1);                                                                                           \
-//         }                                                                                                      \
-//     } while (0)
-
 struct Node {
     int job_id;
     int comp_time;  // in milliseconds
@@ -210,6 +192,9 @@ void genInitialTree() {
             } else {
                 // Assign the parent of a node i as any node from 0 to i - 1
                 int par = rand(0, node_pos - 1);
+                while (shm->tree[par].child_count >= MAX_CHILD_JOBS) {
+                    par = rand(0, node_pos - 1);
+                }
                 int status = shm->tree[par].addChild(node_pos);
                 if (status != -1) {
                     shm->tree[node_pos].setParent(par);
