@@ -4,11 +4,20 @@
 #define BLUE "\033[1;34m"
 #define MAGENTA "\033[1;35m"
 #define CYAN "\033[1;36m"
-#define WHITE "\033[1;37m" 
-#define RESET "\033[0m" 
+#define WHITE "\033[1;37m"
+#define RESET "\033[0m"
+
+// int *q = p + 1;
+// char c;
+// c = *((char *)q);
+// DEBUG("1st: %d", c);
+// c = *((char *)q + 1);
+// DEBUG("2nd: %d", c);
+// c = *((char *)q + 2);
+// DEBUG("3rd: %d", c);
 
 /*
-doubts - 
+doubts -
 will we store boolean in 1 bit or 1 byte?
 
 page table entry size - variable? because of strings (variable names)
