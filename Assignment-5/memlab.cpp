@@ -22,8 +22,6 @@ const size_t MAX_STACK_SIZE = 1024;
 
 const int MEDIUM_INT_MAX = (1 << 23) - 1;
 const int MEDIUM_INT_MIN = -(1 << 23);
-const int CHAR_MAX = (1 << 8) - 1;
-const int CHAR_MIN = 0;
 
 #define LOCK(mutex_p)                                                            \
     do {                                                                         \
@@ -225,7 +223,7 @@ struct PageTable {
             head = MAX_PT_ENTRIES;
             tail = MAX_PT_ENTRIES;
         }
-        print();
+        // print();
         return idx;
     }
 
@@ -240,7 +238,7 @@ struct PageTable {
         if (size == MAX_PT_ENTRIES - 1) {
             head = tail;
         }
-        print();
+        // print();
         return 0;
     }
 
@@ -332,13 +330,15 @@ int freeElem(u_int idx) {
 }
 
 int freeElem(MyType var) {
+    int ret;
     LOCK(&page_table->mutex);
     if (var.isValid()) {
         LOCK(&mem->mutex);
-        int ret = freeElem(counterToIdx(var.ind));
+        ret = freeElem(counterToIdx(var.ind));
         UNLOCK(&mem->mutex);
     }
     UNLOCK(&page_table->mutex);
+    return ret;
 }
 
 void gcRun() {
