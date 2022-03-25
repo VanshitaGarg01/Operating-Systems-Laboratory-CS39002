@@ -61,23 +61,23 @@ struct MyType {
     }
 };
 
-int createMem(size_t bytes);
+void createMem(size_t bytes);
 
 MyType createVar(DataType type);
-int assignVar(MyType var, int val);
-int assignVar(MyType var, char val);
-int assignVar(MyType var, bool val);
-int readVar(MyType var, void *ptr);
+void assignVar(MyType &var, int val);
+void assignVar(MyType &var, char val);
+void assignVar(MyType &var, bool val);
+void readVar(MyType &var, void *ptr);
 
 MyType createArr(DataType type, int len);
-int assignArr(MyType arr, int val[]);
-int assignArr(MyType arr, char val[]);
-int assignArr(MyType arr, bool val[]);
-int assignArr(MyType arr, int index, int val);
-int assignArr(MyType arr, int index, char val);
-int assignArr(MyType arr, int index, bool val);
-int readArr(MyType arr, void *ptr);
-int readArr(MyType arr, int index, void *ptr);
+void assignArr(MyType &arr, int val[]);
+void assignArr(MyType &arr, char val[]);
+void assignArr(MyType &arr, bool val[]);
+void assignArr(MyType &arr, int index, int val);
+void assignArr(MyType &arr, int index, char val);
+void assignArr(MyType &arr, int index, bool val);
+void readArr(MyType &arr, void *ptr);
+void readArr(MyType &arr, int index, void *ptr);
 
 int freeElem(MyType var);
 void gcRun();
