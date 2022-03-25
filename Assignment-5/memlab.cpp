@@ -2,20 +2,20 @@
 
 #include <pthread.h>
 
-#include <csignal>
 #include <cstring>
+
 using namespace std;
 
-#define DEBUG(msg, ...) printf("\033[1;32m[DEBUG] " msg " \033[0m\n", ##__VA_ARGS__);
-#define ERROR(msg, ...) printf("\033[1;31m[ERROR] " msg " \033[0m\n", ##__VA_ARGS__);
-#define WARNING(msg, ...) printf("\033[1;31m[WARNING] " msg "\033[0m\n", ##__VA_ARGS__);
-#define LIBRARY(msg, ...) printf("\033[1;32m[LIBRARY] " msg " \033[0m\n", ##__VA_ARGS__);
-#define PAGE_TABLE(msg, ...) printf("\033[1;33m[PAGE TABLE] " msg " \033[0m\n", ##__VA_ARGS__);
-#define WORD_ALIGN(msg, ...) printf("\033[1;34m[WORD ALIGNMENT] " msg " \033[0m\n", ##__VA_ARGS__);
-#define GC(msg, ...) printf("\033[1;36m[GC] " msg "\033[0m\n", ##__VA_ARGS__);
-#define STACK(msg, ...) printf("\033[1;37m[STACK] " msg "\033[0m\n", ##__VA_ARGS__);
-#define MEMORY(msg, ...) printf("\033[1;35m[MEMORY] " msg "\033[0m\n", ##__VA_ARGS__);
-#define INFO(msg, ...) printf("\033[1;37m[INFO] " msg "\033[0m\n", ##__VA_ARGS__);
+#define DEBUG(msg, ...) printf("\x1b[32m[DEBUG] " msg " \x1b[0m\n", ##__VA_ARGS__);
+#define ERROR(msg, ...) printf("\x1b[31m[ERROR] " msg " \x1b[0m\n", ##__VA_ARGS__);
+#define WARNING(msg, ...) printf("\x1b[31m[WARNING] " msg "\x1b[0m\n", ##__VA_ARGS__);
+#define LIBRARY(msg, ...) printf("\x1b[32m[LIBRARY] " msg " \x1b[0m\n", ##__VA_ARGS__);
+#define PAGE_TABLE(msg, ...) printf("\x1b[33m[PAGE TABLE] " msg " \x1b[0m\n", ##__VA_ARGS__);
+#define WORD_ALIGN(msg, ...) printf("\x1b[34m[WORD ALIGNMENT] " msg " \x1b[0m\n", ##__VA_ARGS__);
+#define GC(msg, ...) printf("\x1b[36m[GC] " msg "\x1b[0m\n", ##__VA_ARGS__);
+#define STACK(msg, ...) printf("\x1b[37m[STACK] " msg "\x1b[0m\n", ##__VA_ARGS__);
+#define MEMORY(msg, ...) printf("\x1b[35m[MEMORY] " msg "\x1b[0m\n", ##__VA_ARGS__);
+#define INFO(msg, ...) printf("\x1b[37m[INFO] " msg "\x1b[0m\n", ##__VA_ARGS__);
 
 typedef unsigned int u_int;
 typedef long unsigned int u_long;
@@ -54,11 +54,9 @@ word alignment
 steps of garbage collection
 
 TODO:
-add logs
+add logs for word alignment
 add signal handling for gcRun from user space (add wakeGC for user space)
-when to do compaction and lock
-add locks to assignVar and assignArr
-word alignment
+word alignment (talk to mainack sir)
 */
 
 struct Memory {
@@ -71,13 +69,11 @@ struct Memory {
     pthread_mutex_t mutex;
 
     int init(size_t bytes) {
-        MEMORY("Initializing memory segment");
         bytes = ((bytes + 3) >> 2) << 2;
         start = (int *)malloc(bytes);
         if (start == NULL) {
             return -1;
         }
-        DEBUG("start = %lu", (u_long)start);
         end = start + (bytes >> 2);
         size = bytes >> 2;  // in words
         *start = (bytes >> 2) << 1;
@@ -93,6 +89,8 @@ struct Memory {
         pthread_mutex_init(&mutex, &attr);
 
         MEMORY("Memory segment created");
+        MEMORY("start = %lu", (u_long)start);
+        MEMORY("size = %lu (in words)", size);
         return 0;
     }
 
@@ -105,7 +103,7 @@ struct Memory {
     }
 
     int *findFreeBlock(size_t sz) {  // sz is the size required for the data (in words)
-        MEMORY("Finding free block for %lu words of data", sz);
+        MEMORY("Finding free block for %lu word(s) of data", sz);
         int *p = start;
         while ((p < end) && ((*p & 1) || ((size_t)(*p >> 1) < sz + 2))) {
             p = p + (*p >> 1);
@@ -120,7 +118,6 @@ struct Memory {
     }
 
     void allocateBlock(int *p, size_t sz) {  // sz is the size required for the data (in words)
-        MEMORY("Allocating block at %lu for %lu words of data", (u_long)p, sz);
         sz += 2;
         u_int old_size = *p >> 1;       // mask out low bit
         *p = (sz << 1) | 1;             // set new length and allocated bit for header
@@ -139,7 +136,7 @@ struct Memory {
             currMaxFree -= sz;
         }
         currMaxFree = max(currMaxFree, totalFree / (numFreeBlocks + 1));
-        MEMORY("Block successfully allocated");
+        MEMORY("Allocated block at %lu for %lu word(s) of data", (u_long)p, sz - 2);
     }
 
     void freeBlock(int *p) {
@@ -147,13 +144,13 @@ struct Memory {
         *p = *p & -2;  // clear allocated flag in header
         u_int curr_size = *p >> 1;
         *(p + curr_size - 1) = *(p + curr_size - 1) & -2;  // clear allocated flag in footer
-        
+
         totalFree += curr_size;
         numFreeBlocks++;
 
         int *next = p + curr_size;                // find next block
         if ((next != end) && (*next & 1) == 0) {  // if next block is free
-            MEMORY("Merging with next block at %lu", (u_long)next);
+            MEMORY("Coalescing with next block at %lu", (u_long)next);
             u_int next_size = *next >> 1;
             *p = (curr_size + next_size) << 1;                                // merge with next block
             *(p + curr_size + next_size - 1) = (curr_size + next_size) << 1;  // set length in footer
@@ -163,7 +160,7 @@ struct Memory {
 
         if ((p != start) && (*(p - 1) & 1) == 0) {  // if previous block is free
             u_int prev_size = *(p - 1) >> 1;
-            MEMORY("Merging with previous block at %lu", (u_long)(p - prev_size));
+            MEMORY("Coalescing with previous block at %lu", (u_long)(p - prev_size));
             *(p - prev_size) = (prev_size + curr_size) << 1;      // set length in header of prev
             *(p + curr_size - 1) = (prev_size + curr_size) << 1;  // set length in footer
             numFreeBlocks--;
@@ -172,7 +169,6 @@ struct Memory {
 
         currMaxFree = max(currMaxFree, (size_t)curr_size);
         currMaxFree = max(currMaxFree, totalFree / (numFreeBlocks + 1));
-        MEMORY("Block successfully freed");
     }
 };
 
@@ -200,8 +196,6 @@ struct PageTableEntry {
     }
 };
 
-Memory *mem;
-
 struct PageTable {
     PageTableEntry pt[MAX_PT_ENTRIES];
     u_int head, tail;
@@ -209,8 +203,7 @@ struct PageTable {
     pthread_mutex_t mutex;
 
     void init() {
-        PAGE_TABLE("Initializing page table");
-        for (int i = 0; i < MAX_PT_ENTRIES; i++) {
+        for (size_t i = 0; i < MAX_PT_ENTRIES; i++) {
             pt[i].init();
             pt[i].addr = i + 1;
         }
@@ -225,9 +218,8 @@ struct PageTable {
     }
 
     int insert(u_int addr) {
-        PAGE_TABLE("Inserting new page table entry with memory offset %d", addr);
         if (size == MAX_PT_ENTRIES) {
-            PAGE_TABLE("Page table is full");
+            PAGE_TABLE("Page table is full, insert failed");
             return -1;
         }
         u_int idx = head;
@@ -242,14 +234,13 @@ struct PageTable {
             head = MAX_PT_ENTRIES;
             tail = MAX_PT_ENTRIES;
         }
-        PAGE_TABLE("Page table entry inserted");
+        PAGE_TABLE("Inserted new page table entry with memory offset %d at array index %d", addr, idx);
         return idx;
     }
 
     int remove(u_int idx) {
-        PAGE_TABLE("Removing entry with array index %d in the page table", idx);
         if (size == 0 || !pt[idx].valid) {
-            PAGE_TABLE("Page table is empty or entry is invalid");
+            PAGE_TABLE("Page table is empty or entry index %d is invalid, remove failed", idx);
             return -1;
         }
         pt[idx].valid = 0;
@@ -259,7 +250,7 @@ struct PageTable {
         if (size == MAX_PT_ENTRIES - 1) {
             head = tail;
         }
-        PAGE_TABLE("Page table entry removed");
+        PAGE_TABLE("Removed entry with array index %d in the page table", idx);
         return 0;
     }
 
@@ -279,7 +270,6 @@ struct Stack {
     size_t size;
 
     void init() {
-        STACK("Initializing stack");
         size = 0;
         STACK("Stack initialized");
     }
@@ -292,24 +282,23 @@ struct Stack {
     }
 
     int push(int v) {
-        STACK("Pushing %d onto stack", v);
         if (size == MAX_STACK_SIZE) {
-            STACK("Stack is full");
+            STACK("Stack is full, push failed");
             return -2;
         }
         st[size++] = v;
-        STACK("Stack entry pushed");
+        STACK("Pushed %d onto stack", v);
         return 0;
     }
 
     int pop() {
-        STACK("Popping stack");
         if (size == 0) {
-            STACK("Stack is empty");
+            STACK("Stack is empty, pop failed");
             return -2;
         }
-        STACK("Stack entry popped");
-        return st[--size];
+        int v = st[--size];
+        STACK("Popped %d from stack", v);
+        return v;
     }
 
     void print() {
@@ -322,6 +311,7 @@ struct Stack {
     }
 };
 
+Memory *mem;
 PageTable *page_table;
 Stack *var_stack;
 
@@ -332,10 +322,10 @@ void freeElem(u_int idx) {
         throw runtime_error("freeElem: Invalid Index");
     }
     mem->freeBlock(mem->getAddr(page_table->pt[idx].addr));
-    GC("freeElem completed successfully");
 }
 
 void freeElem(MyType &var) {
+    LIBRARY("freeElem called for variable with counter = %d", var.ind);
     LOCK(&page_table->mutex);
     LOCK(&mem->mutex);
     if (page_table->pt[counterToIdx(var.ind)].valid) {
@@ -346,7 +336,6 @@ void freeElem(MyType &var) {
 }
 
 void calcNewOffsets() {
-    GC("Calculating new offsets for blocks for compaction");
     int *p = mem->start;
     int offset = 0;
     while (p < mem->end) {
@@ -357,24 +346,24 @@ void calcNewOffsets() {
         }
         p = p + (*p >> 1);
     }
-    GC("New offsets calculated");
+    GC("Completed calculating new offsets for blocks for compaction");
 }
 
 void updatePageTable() {
-    GC("Updating page table for compaction");
-    for (int i = 0; i < MAX_PT_ENTRIES; i++) {
+    for (size_t i = 0; i < MAX_PT_ENTRIES; i++) {
         if (page_table->pt[i].valid) {
             int *p = mem->getAddr(page_table->pt[i].addr);
             int newAddr = *(p + (*p >> 1) - 1) >> 1;
-            PAGE_TABLE("Index: %d, Old addr: %d, New addr: %d", i, page_table->pt[i].addr, newAddr);
+            PAGE_TABLE("Index: %ld, Old addr: %d, New addr: %d", i, page_table->pt[i].addr, newAddr);
             page_table->pt[i].addr = newAddr;
         }
     }
-    GC("Page table updated");
+    GC("Page table updated for compaction");
 }
 
 void compactMemory() {
-    GC("Memory compaction started");
+    GC("Starting memory compaction");
+    ;
     calcNewOffsets();
     updatePageTable();
     int *p = mem->start;
@@ -399,13 +388,15 @@ void compactMemory() {
             next = p + (*p >> 1);
         }
     }
-    GC("Blocks rearranged");
+    GC("Blocks rearranged after compaction");
     p = mem->start;
     while (p < mem->end) {
         *(p + (*p >> 1) - 1) = *p;
         p = p + (*p >> 1);
     }
     GC("Block footers updated");
+    mem->numFreeBlocks = 1;
+    mem->currMaxFree = mem->totalFree;
     GC("Memory compaction completed");
 }
 
@@ -423,13 +414,13 @@ void gcRun() {
 
     double ratio = (double)mem->totalFree / (double)(mem->currMaxFree + 1);
     if (ratio >= COMPACTION_RATIO_THRESHOLD) {
+        GC("Ratio = %f", ratio);
         LOCK(&mem->mutex);
         LOCK(&page_table->mutex);
         compactMemory();
         UNLOCK(&page_table->mutex);
         UNLOCK(&mem->mutex);
     }
-    GC("gcRun completed");
 }
 
 void *gcThread(void *arg) {
@@ -442,12 +433,14 @@ void *gcThread(void *arg) {
 }
 
 void initScope() {
+    LIBRARY("initScope called");
     if (var_stack->push(-1) < 0) {
         throw runtime_error("initScope: Stack full, cannot push");
     }
 }
 
 void endScope() {
+    LIBRARY("endScope called");
     int ind;
     do {
         ind = var_stack->pop();
@@ -463,6 +456,7 @@ void endScope() {
 }
 
 void cleanExit() {
+    LIBRARY("cleanExit called");
     pthread_mutex_destroy(&mem->mutex);
     pthread_mutex_destroy(&page_table->mutex);
     free(mem->start);
@@ -473,6 +467,7 @@ void cleanExit() {
 }
 
 void createMem(size_t bytes) {
+    LIBRARY("createMem called");
     mem = (Memory *)malloc(sizeof(Memory));
     if (mem->init(bytes) == -1) {
         throw runtime_error("createMem: Memory allocation failed");
@@ -492,7 +487,13 @@ MyType create(VarType var_type, DataType data_type, u_int len, u_int size_req) {
     LOCK(&mem->mutex);
     int *p = mem->findFreeBlock(size_req);
     if (p == NULL) {
-        throw runtime_error("create: No free block in memory");
+        LOCK(&page_table->mutex);
+        compactMemory();
+        p = mem->findFreeBlock(size_req);
+        UNLOCK(&page_table->mutex);
+        if (p == NULL) {
+            throw runtime_error("create: No free block in memory");
+        }
     }
     mem->allocateBlock(p, size_req);
     int addr = mem->getOffset(p);
@@ -501,7 +502,6 @@ MyType create(VarType var_type, DataType data_type, u_int len, u_int size_req) {
     if (idx < 0) {
         throw runtime_error("create: No free space in page table");
     }
-    DEBUG("Inserted in page table at index %d", idx);
     UNLOCK(&page_table->mutex);
     UNLOCK(&mem->mutex);
     u_int ind = idxToCounter(idx);
@@ -512,6 +512,7 @@ MyType create(VarType var_type, DataType data_type, u_int len, u_int size_req) {
 }
 
 MyType createVar(DataType type) {
+    LIBRARY("createVar called with type = %s", getDataTypeStr(type).c_str());
     return create(PRIMITIVE, type, 1, 1);
 }
 
@@ -526,6 +527,7 @@ void validate(MyType &var, VarType type) {
 }
 
 void assignVar(MyType &var, int val) {
+    LIBRARY("assignVar (int) called for variable with counter = %d and value = %d", var.ind, val);
     validate(var, PRIMITIVE);
     if (var.data_type != INT && var.data_type != MEDIUM_INT) {
         throw runtime_error("assignVar (int): Type mismatch. Data type of variable is " + getDataTypeStr(var.data_type));
@@ -546,6 +548,7 @@ void assignVar(MyType &var, int val) {
 }
 
 void assignVar(MyType &var, char val) {
+    LIBRARY("assignVar (char) called for variable with counter = %d and value = %c", var.ind, val);
     validate(var, PRIMITIVE);
     if (var.data_type != CHAR) {
         throw runtime_error("assignVar (char): Type mismatch. Data type of variable is " + getDataTypeStr(var.data_type));
@@ -559,6 +562,7 @@ void assignVar(MyType &var, char val) {
 }
 
 void assignVar(MyType &var, bool val) {
+    LIBRARY("assignVar (bool) called for variable with counter = %d and value = %d", var.ind, val);
     validate(var, PRIMITIVE);
     if (var.data_type != BOOLEAN) {
         throw runtime_error("assignVar (bool): Type mismatch. Data type of variable is " + getDataTypeStr(var.data_type));
@@ -572,6 +576,7 @@ void assignVar(MyType &var, bool val) {
 }
 
 void readVar(MyType &var, void *ptr) {
+    LIBRARY("readVar called for variable with counter = %d", var.ind);
     validate(var, PRIMITIVE);
     int size = getSize(var.data_type);
     LOCK(&mem->mutex);
@@ -589,6 +594,7 @@ void readVar(MyType &var, void *ptr) {
 }
 
 MyType createArr(DataType type, int len) {
+    LIBRARY("createArr called with type = %s and len = %d", getDataTypeStr(type).c_str(), len);
     if (len <= 0) {
         throw runtime_error("createArr: Length of array should be greater than 0");
     }
@@ -602,6 +608,7 @@ MyType createArr(DataType type, int len) {
 }
 
 void assignArr(MyType &arr, int val[]) {
+    LIBRARY("assignArr (int) called for array with counter = %d", arr.ind);
     validate(arr, ARRAY);
     if (arr.data_type != INT && arr.data_type != MEDIUM_INT) {
         throw runtime_error("assignArr (int[]): Type mismatch. Data type of variable is " + getDataTypeStr(arr.data_type));
@@ -626,6 +633,7 @@ void assignArr(MyType &arr, int val[]) {
 }
 
 void assignArr(MyType &arr, char val[]) {
+    LIBRARY("assignArr (char) called for array with counter = %d", arr.ind);
     validate(arr, ARRAY);
     if (arr.data_type != CHAR) {
         throw runtime_error("assignArr (char[]): Type mismatch. Data type of variable is " + getDataTypeStr(arr.data_type));
@@ -641,6 +649,7 @@ void assignArr(MyType &arr, char val[]) {
 }
 
 void assignArr(MyType &arr, bool val[]) {
+    LIBRARY("assignArr (bool) called for array with counter = %d", arr.ind);
     validate(arr, ARRAY);
     if (arr.data_type != BOOLEAN) {
         throw runtime_error("assignArr (bool[]): Type mismatch. Data type of variable is " + getDataTypeStr(arr.data_type));
@@ -656,8 +665,9 @@ void assignArr(MyType &arr, bool val[]) {
 }
 
 void assignArr(MyType &arr, int index, int val) {
+    LIBRARY("assignArr (int) called for array with counter = %d at index = %d and value = %d", arr.ind, index, val);
     validate(arr, ARRAY);
-    if (index < 0 || index >= arr.len) {
+    if (index < 0 || index >= (int)arr.len) {
         throw runtime_error("assignArr (index, int): Index out of range");
     }
     if (arr.data_type != INT && arr.data_type != MEDIUM_INT) {
@@ -674,12 +684,14 @@ void assignArr(MyType &arr, int index, int val) {
             }
             memcpy(p + index, &val, getSize(MEDIUM_INT));
         }
+        UNLOCK(&mem->mutex);
     }
 }
 
 void assignArr(MyType &arr, int index, char val) {
+    LIBRARY("assignArr (char) called for array with counter = %d at index = %d and value = %c", arr.ind, index, val);
     validate(arr, ARRAY);
-    if (index < 0 || index >= arr.len) {
+    if (index < 0 || index >= (int)arr.len) {
         throw runtime_error("assignArr (index, char): Index out of range");
     }
     if (arr.data_type != CHAR) {
@@ -694,8 +706,9 @@ void assignArr(MyType &arr, int index, char val) {
 }
 
 void assignArr(MyType &arr, int index, bool val) {
+    LIBRARY("assignArr (bool) called for array with counter = %d at index = %d and value = %d", arr.ind, index, val);
     validate(arr, ARRAY);
-    if (index < 0 || index >= arr.len) {
+    if (index < 0 || index >= (int)arr.len) {
         throw runtime_error("assignArr (index, bool): Index out of range");
     }
     if (arr.data_type != BOOLEAN) {
@@ -710,6 +723,7 @@ void assignArr(MyType &arr, int index, bool val) {
 }
 
 void readArr(MyType &arr, void *ptr) {
+    LIBRARY("readArr called for array with counter = %d", arr.ind);
     validate(arr, ARRAY);
     int size = getSize(arr.data_type);
     LOCK(&mem->mutex);
@@ -734,8 +748,9 @@ void readArr(MyType &arr, void *ptr) {
 }
 
 void readArr(MyType &arr, int index, void *ptr) {
+    LIBRARY("readArr called for array with counter = %d at index = %d", arr.ind, index);
     validate(arr, ARRAY);
-    if (index < 0 || index >= arr.len) {
+    if (index < 0 || index >= (int)arr.len) {
         throw runtime_error("readArr (index): Index out of range");
     }
     int size = getSize(arr.data_type);
@@ -760,188 +775,294 @@ void readArr(MyType &arr, int index, void *ptr) {
 //     createMem(1024 * 1024 * 512);  // 512 MB
 //     initScope();
 //     MyType p1 = createVar(INT);
-//     cout << "p1.addr: " << p1.addr << endl;
-//     MyType p2 = createVar(BOOL);
+//     // cout << "p1.addr: " << p1.ind << endl;
+//     MyType p2 = createVar(BOOLEAN);
 //     MyType p3 = createVar(MEDIUM_INT);
 //     MyType p4 = createVar(CHAR);
 //     usleep(150 * 1000);
 //     freeElem(p1);
 //     freeElem(p3);
 //     MyType p5 = createVar(INT);
-//     cout << "p5.addr: " << p5.addr << endl;
+//     // cout << "p5.addr: " << p5.ind << endl;
 //     endScope();
 //     initScope();
 //     usleep(100 * 1000);
-//     p1 = createVar(INT);
-//     p2 = createVar(BOOL);
-//     p3 = createVar(MEDIUM_INT);
-//     p4 = createVar(CHAR);
+//     MyType q1 = createVar(INT);
+//     MyType q2 = createVar(BOOLEAN);
+//     MyType q3 = createVar(MEDIUM_INT);
+//     MyType q4 = createVar(CHAR);
 //     endScope();
-//     sleep(100);
-//     freeMem();
+//     usleep(10000);
+//     cleanExit();
 // }
 
-int main() {
-    createMem(120);
+// void testCompaction() {
+//     createMem(144);
+//     MyType p1 = createVar(INT);
+//     MyType p2 = createVar(INT);
+//     MyType arr1 = createArr(INT, 10);
+//     MyType p3 = createVar(INT);
+//     MyType p4 = createVar(INT);
+//     MyType arr2 = createArr(INT, 10);
+//     // usleep(1000);
+//     freeElem(p1);
+//     freeElem(p2);
+//     // freeElem(arr1);
+//     freeElem(p4);
+//     compactMemory();
+//     // int* arrptr1 = symTable->getPtr(arr1.addr >> 2);
+//     // cout << "arrptr1: " << arrptr1 - mem->start << endl;
+//     // int* ptr3 = symTable->getPtr(p3.addr >> 2);
+//     // cout << "ptr3:" << ptr3 - mem->start << endl;
+//     // int* arrptr2 = symTable->getPtr(arr2.addr >> 2);
+//     // cout << "arrptr2: " << arrptr2 - mem->start << endl;
+//     // cout << endl;
+//     int* p = mem->start;
+//     cout << (*(p) >> 1) << " " << (*(p)&1) << endl;
+//     cout << (*(p + 11) >> 1) << " " << (*(p + 11) & 1) << endl;
+//     cout << endl;
+//     cout << (*(p + 12) >> 1) << " " << (*(p + 12) & 1) << endl;
+//     cout << (*(p + 14) >> 1) << " " << (*(p + 14) & 1) << endl;
+//     cout << endl;
+//     cout << (*(p + 15) >> 1) << " " << (*(p + 15) & 1) << endl;
+//     cout << (*(p + 26) >> 1) << " " << (*(p + 26) & 1) << endl;
+//     cout << endl;
+//     cout << (*(p + 27) >> 1) << " " << (*(p + 27) & 1) << endl;
+//     p = mem->end - 1;
+//     cout << (*(p) >> 1) << " " << (*(p)&1) << endl;
 
-    // MyType aa = createVar(INT);
-    // aa.print();
-    // assignVar(aa, -19);
-    // int x;
-    // readVar(aa, &x);
-    // DEBUG("value of aa = %d", x);
+//     cleanExit();
+// }
 
-    // int *p = mem->start;
-    // printf("%d, %d\n", *p >> 1, *p & 1);
-    // printf("%d, %d\n", *(p + 2) >> 1, *(p + 2) & 1);
-    // printf("%d, %d\n", *(p + 3) >> 1, *(p + 3) & 1);
+void testCompactionCall() {
+    createMem(144);
+    MyType p1 = createVar(INT);
+    assignVar(p1, 5);
+    MyType p2 = createVar(INT);
+    assignVar(p2, 10);
+    MyType arr1 = createArr(INT, 8);
+    int temp[] = {1, 2, 3, 4, 5, 6, 7, 8};
+    assignArr(arr1, temp);
+    MyType p3 = createVar(INT);
+    assignVar(p3, -15);
+    MyType p4 = createVar(INT);
+    assignVar(p4, -10);
+    MyType arr2 = createArr(INT, 6);
+    int temp1[] = {1, 2, 3, 4, 5, 6};
+    assignArr(arr2, temp1);
+    // freeElem(arr1);
+    freeElem(p1);
+    freeElem(p2);
+    freeElem(p3);
+    printf("Total free memory: %lu\n", mem->totalFree);
+    printf("Total free blocks: %d\n", mem->numFreeBlocks);
+    printf("Biggest free block: %lu\n", mem->currMaxFree);
+    MyType arr3 = createArr(INT, 6);
+    int temp2[] = {10, 20, 30, 40, 50, 60};
+    assignArr(arr3, temp2);
+    // usleep(60 * 1000);
+    // gcRun();
+    // compactMemory();
+    // int* ptr1 = symTable->getPtr(p1.addr >> 2);
+    // cout << "ptr1:" << ptr1 - mem->start << endl;
+    // int* ptr2 = symTable->getPtr(p2.addr >> 2);
+    // cout << "ptr2:" << ptr2 - mem->start << endl;
+    // int* ptr3 = symTable->getPtr(p3.addr >> 2);
+    // cout << "ptr3:" << ptr3 - mem->start << endl;
+    // int* ptr4 = symTable->getPtr(p4.addr >> 2);
+    // cout << "ptr4:" << ptr4 - mem->start << endl;
+    // int* arrptr2 = symTable->getPtr(arr2.addr >> 2);
+    // cout << "arrptr2: " << arrptr2 - mem->start << endl;
+    // int* arrptr3 = symTable->getPtr(arr3.addr >> 2);
+    // cout << "arrptr3: " << arrptr3 - mem->start << endl;
+    printf("Total free memory: %lu\n", mem->totalFree);
+    printf("Total free blocks: %d\n", mem->numFreeBlocks);
+    printf("Biggest free block: %lu\n", mem->currMaxFree);
 
-    // MyType a = createVar(CHAR);
-    // a.print();
-    // page_table->pt[counterToIdx(a.ind)].print();
-    // assignVar(a, 'b');
-    // char v;
-    // readVar(a, &v);
-    // DEBUG("value of a = %c", v);
-
-    // MyType b = createVar(BOOLEAN);
-    // b.print();
-    // page_table->pt[counterToIdx(b.ind)].print();
-    // assignVar(b, false);
-    // bool xx;
-    // readVar(b, &xx);
-    // // cout << xx << endl;
-    // DEBUG("value of b = %d", xx);
-
-    // MyType bb = createVar(MEDIUM_INT);
-    // bb.print();
-    // assignVar(bb, 19);
-    // int y;
-    // readVar(bb, &y);
-    // DEBUG("value of bb = %d", y);
-
-    // MyType arr1 = createArr(INT, 5);
-    // arr1.print();
-    // int arr1_val[] = {1, 2, -3, 4, -5};
-    // assignArr(arr1, arr1_val);
-    // int arr1_val_read[5];
-    // readArr(arr1, arr1_val_read);
-    // for (size_t i = 0; i < 5; i++) {
-    //     DEBUG("arr_val_read[%zu] = %d", i, arr1_val_read[i]);
-    // }
-    // assignArr(arr1, 0, -6);
-    // assignArr(arr1, 1, -7);
-    // assignArr(arr1, 2, -8);
-    // assignArr(arr1, 3, -9);
-    // assignArr(arr1, 4, 25);
-    // readArr(arr1, arr1_val_read);
-    // for (size_t i = 0; i < 5; i++) {
-    //     DEBUG("arr_val_read[%zu] = %d", i, arr1_val_read[i]);
-    // }
-    // int v;
-    // readArr(arr1, 0, &v);
-    // DEBUG("%d", v);
-    // readArr(arr1, 1, &v);
-    // DEBUG("%d", v);
-    // readArr(arr1, 2, &v);
-    // DEBUG("%d", v);
-    // readArr(arr1, 3, &v);
-    // DEBUG("%d", v);
-    // readArr(arr1, 4, &v);
-    // DEBUG("%d", v);
-
-    // MyType arr = createArr(MEDIUM_INT, 5);
-    // arr.print();
-    // int arr_val[] = {1, 2, -3, 4, -5};
-    // assignArr(arr, arr_val);
-    // int arr_val_read[5];
-    // readArr(arr, arr_val_read);
-    // for (size_t i = 0; i < 5; i++) {
-    //     DEBUG("arr_val_read[%zu] = %d", i, arr_val_read[i]);
-    // }
-    // printf("\n");
-    // assignArr(arr, 0, -6);
-    // assignArr(arr, 1, 7);
-    // assignArr(arr, 2, -8);
-    // assignArr(arr, 3, 9);
-    // assignArr(arr, 4, 25);
-    // readArr(arr, arr_val_read);
-    // for (size_t i = 0; i < 5; i++) {
-    //     DEBUG("arr_val_read[%zu] = %d", i, arr_val_read[i]);
-    // }
-    // int v;
-    // readArr(arr, 0, &v);
-    // DEBUG("%d", v);
-    // readArr(arr, 1, &v);
-    // DEBUG("%d", v);
-    // readArr(arr, 2, &v);
-    // DEBUG("%d", v);
-    // readArr(arr, 3, &v);
-    // DEBUG("%d", v);
-    // readArr(arr, 4, &v);
-    // DEBUG("%d", v);
-
-    //     MyType arr2 = createArr(INT, 5);
-    //     arr2.print();
-    //     int arr2_val[] = {1, 2, -3, 4, -5};
-    //     int r2 = assignArr(arr2, arr2_val);
-    //     DEBUG("ret = %d", r2);
-    //     int arr2_val_read[5];
-    //     readArr(arr2, arr2_val_read);
-    //     // for (size_t i = 0; i < 5; i++) {
-    //     //     DEBUG("arr_val_read[%zu] = %d", i, arr2_val_read[i]);
-    //     // }
-    //     assignArr(arr2, 0, -6);
-    //     assignArr(arr2, 1, -7);
-    //     assignArr(arr2, 2, -8);
-    //     assignArr(arr2, 3, -9);
-    //     assignArr(arr2, 4, 25);
-    //     readArr(arr2, arr2_val_read);
-    //     // for (size_t i = 0; i < 5; i++) {
-    //     //     DEBUG("arr_val_read[%zu] = %d", i, arr2_val_read[i]);
-    //     // }
-
-    //     freeElem(arr);
-
-    // MyType arr3 = createArr(CHAR, 5);
-    // arr3.print();
-    // char arr3_val[] = {'a', 'b', 'c', 'd', 'e'};
-    // assignArr(arr3, arr3_val);
-    // char arr3_val_read[5];
-    // readArr(arr3, arr3_val_read);
-    // for (size_t i = 0; i < 5; i++) {
-    //     DEBUG("arr3_val_read[%zu] = %c", i, arr3_val_read[i]);
-    // }
-    // printf("\n");
-    // assignArr(arr3, 0, 'f');
-    // assignArr(arr3, 1, 'g');
-    // assignArr(arr3, 2, 'h');
-    // assignArr(arr3, 3, 'i');
-    // assignArr(arr3, 4, 'j');
-    // readArr(arr3, arr3_val_read);
-    // for (size_t i = 0; i < 5; i++) {
-    //     DEBUG("arr3_val_read[%zu] = %c", i, arr3_val_read[i]);
-    // }
-
-    // MyType arr = createArr(BOOLEAN, 5);
-    // arr.print();
-    // bool arr_val[] = {true, false, true, false, true};
-    // assignArr(arr, arr_val);
-    // bool arr_val_read[5];
-    // readArr(arr, arr_val_read);
-    // for (size_t i = 0; i < 5; i++) {
-    //     DEBUG("arr_val_read[%zu] = %d", i, arr_val_read[i]);
-    // }
-    // printf("\n");
-    // assignArr(arr, 0, false);
-    // assignArr(arr, 1, true);
-    // assignArr(arr, 2, false);
-    // assignArr(arr, 3, true);
-    // assignArr(arr, 4, false);
-    // readArr(arr, arr_val_read);
-    // for (size_t i = 0; i < 5; i++) {
-    //     DEBUG("arr_val_read[%zu] = %d", i, arr_val_read[i]);
-    // }
-
-    cleanExit();
+    int x;
+    // readVar(p1, &x);
+    // printf("p1: %d\n", x);
+    // readVar(p2, &x);
+    // printf("p2: %d\n", x);
+    // readVar(p3, &x);
+    // printf("p3: %d\n", x);
+    readVar(p4, &x);
+    printf("p4: %d\n", x);
+    int t[6];
+    readArr(arr2, t);
+    for (int i = 0; i < 6; i++) {
+        printf("arr2[%d]: %d\n", i, t[i]);
+    }
+    readArr(arr3, t);
+    for (int i = 0; i < 6; i++) {
+        printf("arr3[%d]: %d\n", i, t[i]);
+    }
 }
+
+// int main() {
+//     // createMem(120);
+
+//     // testCode();
+//     testCompactionCall();
+
+//     // MyType aa = createVar(INT);
+//     // aa.print();
+//     // assignVar(aa, -19);
+//     // int x;
+//     // readVar(aa, &x);
+//     // DEBUG("value of aa = %d", x);
+
+//     // int *p = mem->start;
+//     // printf("%d, %d\n", *p >> 1, *p & 1);
+//     // printf("%d, %d\n", *(p + 2) >> 1, *(p + 2) & 1);
+//     // printf("%d, %d\n", *(p + 3) >> 1, *(p + 3) & 1);
+
+//     // MyType a = createVar(CHAR);
+//     // a.print();
+//     // page_table->pt[counterToIdx(a.ind)].print();
+//     // assignVar(a, 'b');
+//     // char v;
+//     // readVar(a, &v);
+//     // DEBUG("value of a = %c", v);
+
+//     // MyType b = createVar(BOOLEAN);
+//     // b.print();
+//     // page_table->pt[counterToIdx(b.ind)].print();
+//     // assignVar(b, false);
+//     // bool xx;
+//     // readVar(b, &xx);
+//     // // cout << xx << endl;
+//     // DEBUG("value of b = %d", xx);
+
+//     // MyType bb = createVar(MEDIUM_INT);
+//     // bb.print();
+//     // assignVar(bb, 19);
+//     // int y;
+//     // readVar(bb, &y);
+//     // DEBUG("value of bb = %d", y);
+
+//     // MyType arr1 = createArr(INT, 5);
+//     // arr1.print();
+//     // int arr1_val[] = {1, 2, -3, 4, -5};
+//     // assignArr(arr1, arr1_val);
+//     // int arr1_val_read[5];
+//     // readArr(arr1, arr1_val_read);
+//     // for (size_t i = 0; i < 5; i++) {
+//     //     DEBUG("arr_val_read[%zu] = %d", i, arr1_val_read[i]);
+//     // }
+//     // assignArr(arr1, 0, -6);
+//     // assignArr(arr1, 1, -7);
+//     // assignArr(arr1, 2, -8);
+//     // assignArr(arr1, 3, -9);
+//     // assignArr(arr1, 4, 25);
+//     // readArr(arr1, arr1_val_read);
+//     // for (size_t i = 0; i < 5; i++) {
+//     //     DEBUG("arr_val_read[%zu] = %d", i, arr1_val_read[i]);
+//     // }
+//     // int v;
+//     // readArr(arr1, 0, &v);
+//     // DEBUG("%d", v);
+//     // readArr(arr1, 1, &v);
+//     // DEBUG("%d", v);
+//     // readArr(arr1, 2, &v);
+//     // DEBUG("%d", v);
+//     // readArr(arr1, 3, &v);
+//     // DEBUG("%d", v);
+//     // readArr(arr1, 4, &v);
+//     // DEBUG("%d", v);
+
+//     // MyType arr = createArr(MEDIUM_INT, 5);
+//     // arr.print();
+//     // int arr_val[] = {1, 2, -3, 4, -5};
+//     // assignArr(arr, arr_val);
+//     // int arr_val_read[5];
+//     // readArr(arr, arr_val_read);
+//     // for (size_t i = 0; i < 5; i++) {
+//     //     DEBUG("arr_val_read[%zu] = %d", i, arr_val_read[i]);
+//     // }
+//     // printf("\n");
+//     // assignArr(arr, 0, -6);
+//     // assignArr(arr, 1, 7);
+//     // assignArr(arr, 2, -8);
+//     // assignArr(arr, 3, 9);
+//     // assignArr(arr, 4, 25);
+//     // readArr(arr, arr_val_read);
+//     // for (size_t i = 0; i < 5; i++) {
+//     //     DEBUG("arr_val_read[%zu] = %d", i, arr_val_read[i]);
+//     // }
+//     // int v;
+//     // readArr(arr, 0, &v);
+//     // DEBUG("%d", v);
+//     // readArr(arr, 1, &v);
+//     // DEBUG("%d", v);
+//     // readArr(arr, 2, &v);
+//     // DEBUG("%d", v);
+//     // readArr(arr, 3, &v);
+//     // DEBUG("%d", v);
+//     // readArr(arr, 4, &v);
+//     // DEBUG("%d", v);
+
+//     //     MyType arr2 = createArr(INT, 5);
+//     //     arr2.print();
+//     //     int arr2_val[] = {1, 2, -3, 4, -5};
+//     //     int r2 = assignArr(arr2, arr2_val);
+//     //     DEBUG("ret = %d", r2);
+//     //     int arr2_val_read[5];
+//     //     readArr(arr2, arr2_val_read);
+//     //     // for (size_t i = 0; i < 5; i++) {
+//     //     //     DEBUG("arr_val_read[%zu] = %d", i, arr2_val_read[i]);
+//     //     // }
+//     //     assignArr(arr2, 0, -6);
+//     //     assignArr(arr2, 1, -7);
+//     //     assignArr(arr2, 2, -8);
+//     //     assignArr(arr2, 3, -9);
+//     //     assignArr(arr2, 4, 25);
+//     //     readArr(arr2, arr2_val_read);
+//     //     // for (size_t i = 0; i < 5; i++) {
+//     //     //     DEBUG("arr_val_read[%zu] = %d", i, arr2_val_read[i]);
+//     //     // }
+
+//     //     freeElem(arr);
+
+//     // MyType arr3 = createArr(CHAR, 5);
+//     // arr3.print();
+//     // char arr3_val[] = {'a', 'b', 'c', 'd', 'e'};
+//     // assignArr(arr3, arr3_val);
+//     // char arr3_val_read[5];
+//     // readArr(arr3, arr3_val_read);
+//     // for (size_t i = 0; i < 5; i++) {
+//     //     DEBUG("arr3_val_read[%zu] = %c", i, arr3_val_read[i]);
+//     // }
+//     // printf("\n");
+//     // assignArr(arr3, 0, 'f');
+//     // assignArr(arr3, 1, 'g');
+//     // assignArr(arr3, 2, 'h');
+//     // assignArr(arr3, 3, 'i');
+//     // assignArr(arr3, 4, 'j');
+//     // readArr(arr3, arr3_val_read);
+//     // for (size_t i = 0; i < 5; i++) {
+//     //     DEBUG("arr3_val_read[%zu] = %c", i, arr3_val_read[i]);
+//     // }
+
+//     // MyType arr = createArr(BOOLEAN, 5);
+//     // arr.print();
+//     // bool arr_val[] = {true, false, true, false, true};
+//     // assignArr(arr, arr_val);
+//     // bool arr_val_read[5];
+//     // readArr(arr, arr_val_read);
+//     // for (size_t i = 0; i < 5; i++) {
+//     //     DEBUG("arr_val_read[%zu] = %d", i, arr_val_read[i]);
+//     // }
+//     // printf("\n");
+//     // assignArr(arr, 0, false);
+//     // assignArr(arr, 1, true);
+//     // assignArr(arr, 2, false);
+//     // assignArr(arr, 3, true);
+//     // assignArr(arr, 4, false);
+//     // readArr(arr, arr_val_read);
+//     // for (size_t i = 0; i < 5; i++) {
+//     //     DEBUG("arr_val_read[%zu] = %d", i, arr_val_read[i]);
+//     // }
+
+//     // cleanExit();
+// }

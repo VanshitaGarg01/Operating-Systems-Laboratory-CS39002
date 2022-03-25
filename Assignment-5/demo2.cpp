@@ -1,0 +1,62 @@
+#include <iostream>
+
+#include "memlab.h"
+
+using namespace std;
+
+void fibonacci(MyType fib, MyType k) {
+    initScope();
+    int k_val;
+    readVar(k, &k_val);
+    for (int i = 0; i < k_val; i++) {
+        if (i == 0) {
+            assignArr(fib, 0, 1);
+        } else if (i == 1) {
+            assignArr(fib, 1, 1);
+        } else {
+            int fib_i_1, fib_i_2;
+            readArr(fib, i - 1, &fib_i_1);
+            readArr(fib, i - 2, &fib_i_2);
+            assignArr(fib, i, fib_i_1 + fib_i_2);
+        }
+    }
+    endScope();
+    gcRun();
+}
+
+int fibonacciProduct(MyType k) {
+    initScope();
+    int k_val;
+    readVar(k, &k_val);
+    MyType fib = createArr(INT, k_val);
+    fibonacci(fib, k);
+    // display the fib array
+    for (int i = 0; i < k_val; i++) {
+        int fib_i;
+        readArr(fib, i, &fib_i);
+        printf("%d\n", fib_i);
+    }
+    long long prod = 1;
+    for (int i = 0; i < k_val; i++) {
+        int fib_val;
+        readArr(fib, i, &fib_val);
+        prod *= fib_val;
+    }
+    endScope();
+    gcRun();
+    return prod;
+}
+
+int main(int argc, char* argv[]) {
+    createMem(500 * 1024 * 1024);
+    initScope();
+    MyType k = createVar(INT);
+    assignVar(k, atoi(argv[1]));
+    int k_val;
+    readVar(k, &k_val);
+    long long prod = fibonacciProduct(k);
+    printf("The product of the first %d fibonacci numbers is %lld\n", k_val, prod);
+    endScope();
+    gcRun();
+    cleanExit();
+}
