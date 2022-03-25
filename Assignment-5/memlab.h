@@ -79,7 +79,7 @@ void assignArr(MyType &arr, int index, bool val);
 void readArr(MyType &arr, void *ptr);
 void readArr(MyType &arr, int index, void *ptr);
 
-int freeElem(MyType var);
+void freeElem(MyType &var);
 void gcRun();
 
 void initScope();

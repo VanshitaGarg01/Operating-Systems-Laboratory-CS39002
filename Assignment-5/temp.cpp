@@ -1,7 +1,8 @@
 #include <cstring>
 #include <iostream>
 
-#include "t.h"
+// #include "t.h"
+#define STACK(msg, ...) printf("\033[1;38m[STACK] " msg "\033[0m\n", ##__VA_ARGS__);
 
 using namespace std;
 
@@ -85,7 +86,7 @@ int main() {
 
     // temp ex = a;
 
-    MyType mt;
+    STACK("hello");
 
 }
 
