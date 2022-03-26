@@ -13,7 +13,7 @@ void func1(MyType x, MyType y) {  // INT
     }
     freeElem(arr);
     endScope();
-    gcRun();
+    gcActivate();
 }
 
 void func2(MyType x, MyType y) {  // MEDIUM INT
@@ -25,7 +25,7 @@ void func2(MyType x, MyType y) {  // MEDIUM INT
     }
     freeElem(arr);
     endScope();
-    gcRun();
+    gcActivate();
 }
 
 void func3(MyType x, MyType y) {  // CHAR
@@ -36,7 +36,7 @@ void func3(MyType x, MyType y) {  // CHAR
     }
     freeElem(arr);
     endScope();
-    gcRun();
+    gcActivate();
 }
 
 void func4(MyType x, MyType y) {  // BOOL
@@ -47,7 +47,7 @@ void func4(MyType x, MyType y) {  // BOOL
     }
     freeElem(arr);
     endScope();
-    gcRun();
+    gcActivate();
 }
 
 void func5(MyType x, MyType y) {  // INT
@@ -59,7 +59,7 @@ void func5(MyType x, MyType y) {  // INT
     }
     freeElem(arr);
     endScope();
-    gcRun();
+    gcActivate();
 }
 
 void func6(MyType x, MyType y) {  // MEDIUM INT
@@ -71,7 +71,7 @@ void func6(MyType x, MyType y) {  // MEDIUM INT
     }
     freeElem(arr);
     endScope();
-    gcRun();
+    gcActivate();
 }
 
 void func7(MyType x, MyType y) {  // CHAR
@@ -82,7 +82,7 @@ void func7(MyType x, MyType y) {  // CHAR
     }
     freeElem(arr);
     endScope();
-    gcRun();
+    gcActivate();
 }
 
 void func8(MyType x, MyType y) {  // BOOL
@@ -93,7 +93,7 @@ void func8(MyType x, MyType y) {  // BOOL
     }
     freeElem(arr);
     endScope();
-    gcRun();
+    gcActivate();
 }
 
 void func9(MyType x, MyType y) {  // INT
@@ -105,7 +105,7 @@ void func9(MyType x, MyType y) {  // INT
     }
     freeElem(arr);
     endScope();
-    gcRun();
+    gcActivate();
 }
 
 void func10(MyType x, MyType y) {  // CHAR
@@ -116,7 +116,7 @@ void func10(MyType x, MyType y) {  // CHAR
     }
     freeElem(arr);
     endScope();
-    gcRun();
+    gcActivate();
 }
 
 int main() {
@@ -144,6 +144,6 @@ int main() {
     func10(x3, y3);
 
     endScope();
-    gcRun();
+    gcActivate();
     cleanExit();
 }

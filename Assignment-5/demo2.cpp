@@ -21,7 +21,7 @@ void fibonacci(MyType fib, MyType k) {
         }
     }
     endScope();
-    gcRun();
+    gcActivate();
 }
 
 int fibonacciProduct(MyType k) {
@@ -30,20 +30,15 @@ int fibonacciProduct(MyType k) {
     readVar(k, &k_val);
     MyType fib = createArr(INT, k_val);
     fibonacci(fib, k);
-    // display the fib array
-    for (int i = 0; i < k_val; i++) {
-        int fib_i;
-        readArr(fib, i, &fib_i);
-        printf("%d\n", fib_i);
-    }
     long long prod = 1;
     for (int i = 0; i < k_val; i++) {
         int fib_val;
         readArr(fib, i, &fib_val);
+        printf("%d\n", fib_val);
         prod *= fib_val;
     }
     endScope();
-    gcRun();
+    gcActivate();
     return prod;
 }
 
@@ -57,6 +52,6 @@ int main(int argc, char* argv[]) {
     long long prod = fibonacciProduct(k);
     printf("The product of the first %d fibonacci numbers is %lld\n", k_val, prod);
     endScope();
-    gcRun();
+    gcActivate();
     cleanExit();
 }

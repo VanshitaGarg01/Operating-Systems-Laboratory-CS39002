@@ -80,7 +80,7 @@ void readArr(MyType &arr, void *ptr);
 void readArr(MyType &arr, int index, void *ptr);
 
 void freeElem(MyType &var);
-void gcRun();
+void gcActivate();
 
 void initScope();
 void endScope();
