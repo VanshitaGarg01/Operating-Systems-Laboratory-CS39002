@@ -1,7 +1,7 @@
 CC=g++
-CFLAGS=-Wall
+CFLAGS=-Wall -DLOGS
 
-demo : demo1 demo2
+demo : demo1 demo2 demo3
 
 demo1: demo1.o libmemlab.a
 	$(CC) $(CFLAGS) -o demo1 demo1.o -L. -lmemlab -lpthread
@@ -15,6 +15,14 @@ demo2: demo2.o libmemlab.a
 demo2.o: demo2.cpp
 	$(CC) $(CFLAGS) -c demo2.cpp
 
+demo3: demo3.o libmemlab.a
+	$(CC) $(CFLAGS) -o demo3 demo3.o -L. -lmemlab -lpthread
+
+demo3.o: demo3.cpp
+	$(CC) $(CFLAGS) -c demo3.cpp
+
+lib: libmemlab.a
+
 libmemlab.a: memlab.o
 	ar -rcs libmemlab.a memlab.o
 
@@ -22,4 +30,4 @@ memlab.o: memlab.cpp memlab.h
 	$(CC) $(CFLAGS) -c memlab.cpp -lpthread
 
 clean:
-	rm libmemlab.a memlab.o demo1 demo1.o demo2 demo2.o
+	rm -f libmemlab.a memlab.o demo1 demo1.o demo2 demo2.o

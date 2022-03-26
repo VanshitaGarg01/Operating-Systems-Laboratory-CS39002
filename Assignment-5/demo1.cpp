@@ -124,13 +124,21 @@ int main() {
     createMem(250 * 1024 * 1024);
     initScope();
     MyType x1 = createVar(INT);
+    assignVar(x1, 16);
     MyType y1 = createVar(INT);
+    assignVar(y1, -39);
     MyType x2 = createVar(MEDIUM_INT);
+    assignVar(x2, 22);
     MyType y2 = createVar(MEDIUM_INT);
+    assignVar(y2, -95);
     MyType x3 = createVar(CHAR);
+    assignVar(x3, 'a');
     MyType y3 = createVar(CHAR);
+    assignVar(y3, 'z');
     MyType x4 = createVar(BOOLEAN);
+    assignVar(x4, true);
     MyType y4 = createVar(BOOLEAN);
+    assignVar(y4, false);
 
     func1(x1, y1);
     func2(x2, y2);

@@ -1,12 +1,14 @@
 #include "memlab.h"
 
 #include <pthread.h>
+#include <semaphore.h>
 #include <signal.h>
 
 #include <cstring>
 
 using namespace std;
 
+#ifdef LOGS
 #define DEBUG(msg, ...) printf("\x1b[32m[DEBUG] " msg " \x1b[0m\n", ##__VA_ARGS__);
 #define ERROR(msg, ...) printf("\x1b[31m[ERROR] " msg " \x1b[0m\n", ##__VA_ARGS__);
 #define WARNING(msg, ...) printf("\x1b[31m[WARNING] " msg "\x1b[0m\n", ##__VA_ARGS__);
@@ -16,7 +18,17 @@ using namespace std;
 #define GC(msg, ...) printf("\x1b[36m[GC] " msg "\x1b[0m\n", ##__VA_ARGS__);
 #define STACK(msg, ...) printf("\x1b[37m[STACK] " msg "\x1b[0m\n", ##__VA_ARGS__);
 #define MEMORY(msg, ...) printf("\x1b[35m[MEMORY] " msg "\x1b[0m\n", ##__VA_ARGS__);
-#define INFO(msg, ...) printf("\x1b[37m[INFO] " msg "\x1b[0m\n", ##__VA_ARGS__);
+#else
+#define DEBUG(msg, ...)
+#define ERROR(msg, ...)
+#define WARNING(msg, ...)
+#define LIBRARY(msg, ...)
+#define PAGE_TABLE(msg, ...)
+#define WORD_ALIGN(msg, ...)
+#define GC(msg, ...)
+#define STACK(msg, ...)
+#define MEMORY(msg, ...)
+#endif
 
 typedef unsigned int u_int;
 typedef long unsigned int u_long;
@@ -27,7 +39,7 @@ const size_t MAX_STACK_SIZE = 1024;
 const int MEDIUM_INT_MAX = (1 << 23) - 1;
 const int MEDIUM_INT_MIN = -(1 << 23);
 
-const int GC_SLEEP_MS = 50; 
+const int GC_SLEEP_MS = 50;
 const double COMPACTION_RATIO_THRESHOLD = 2;
 
 #define LOCK(mutex_p)                                                            \
@@ -47,17 +59,6 @@ const double COMPACTION_RATIO_THRESHOLD = 2;
             exit(1);                                                               \
         }                                                                          \
     } while (0)
-
-/*
-Logs:
-calling library functions
-creating/updating page table entries
-word alignment
-steps of garbage collection
-
-TODO:
-add logs for word alignment
-*/
 
 struct Memory {
     int *start;
@@ -89,7 +90,7 @@ struct Memory {
         pthread_mutex_init(&mutex, &attr);
 
         MEMORY("Memory segment created");
-        MEMORY("start = %lu", (u_long)start);
+        MEMORY("start address = %lu", (u_long)start);
         MEMORY("size = %lu (in words)", size);
         return 0;
     }
@@ -314,6 +315,8 @@ struct Stack {
 Memory *mem;
 PageTable *page_table;
 Stack *var_stack;
+pthread_t gc_tid;
+sem_t gc_sem;
 
 void freeElem(u_int idx) {
     GC("freeElem called for array index %d in page table", idx);
@@ -363,7 +366,6 @@ void updatePageTable() {
 
 void compactMemory() {
     GC("Starting memory compaction");
-    ;
     calcNewOffsets();
     updatePageTable();
     int *p = mem->start;
@@ -400,8 +402,6 @@ void compactMemory() {
     GC("Memory compaction completed");
 }
 
-pthread_t gc_tid;
-
 void gcRun() {
     GC("gcRun called");
     for (size_t i = 0; i < MAX_PT_ENTRIES; i++) {
@@ -415,11 +415,14 @@ void gcRun() {
     }
 
     double ratio = (double)mem->totalFree / (double)(mem->currMaxFree + 1);
+    GC("Ratio = %f", ratio);
     if (ratio >= COMPACTION_RATIO_THRESHOLD) {
-        GC("Ratio = %f", ratio);
+        GC("Ratio more than compaction ratio threshold");
         LOCK(&mem->mutex);
         LOCK(&page_table->mutex);
+        GC("Before compaction: Total free memory = %ld, Largest free block = %ld, No. of free blocks = %d", mem->totalFree, mem->currMaxFree, mem->numFreeBlocks);
         compactMemory();
+        GC("Before compaction: Total free memory = %ld, Largest free block = %ld, No. of free blocks = %d", mem->totalFree, mem->currMaxFree, mem->numFreeBlocks);
         UNLOCK(&page_table->mutex);
         UNLOCK(&mem->mutex);
     }
@@ -436,14 +439,18 @@ void handleSIGUSR1(int sig) {
 }
 
 void *gcThread(void *arg) {
+    GC("Garbage collection thread created");
     signal(SIGUSR1, handleSIGUSR1);
+    GC("Signal handler for SIGUSR1 registered");
+    sem_post(&gc_sem);
     sigset_t mask;
     sigemptyset(&mask);
     sigaddset(&mask, SIGUSR1);
+    pthread_sigmask(SIG_UNBLOCK, &mask, NULL);
     while (1) {
         usleep(GC_SLEEP_MS * 1000);  // adjust time
         pthread_sigmask(SIG_BLOCK, &mask, NULL);
-        GC("Garbage collection thread awakened");
+        GC("Garbage collection thread awakened from sleep");
         gcRun();
         pthread_sigmask(SIG_UNBLOCK, &mask, NULL);
     }
@@ -467,6 +474,7 @@ void endScope() {
         if (ind >= 0) {
             LOCK(&page_table->mutex);
             page_table->pt[counterToIdx(ind)].marked = 0;
+            PAGE_TABLE("Unmarked entry in page table for variable with counter = %d", ind);
             UNLOCK(&page_table->mutex);
         }
     } while (ind >= 0);
@@ -476,29 +484,46 @@ void cleanExit() {
     LIBRARY("cleanExit called");
     LOCK(&mem->mutex);
     LOCK(&page_table->mutex);
+    sem_destroy(&gc_sem);
     pthread_mutex_destroy(&mem->mutex);
     pthread_mutex_destroy(&page_table->mutex);
     free(mem->start);
     free(mem);
+    MEMORY("Freed main memory");
     free(page_table);
+    PAGE_TABLE("Freed memory allotted to page table");
     free(var_stack);
+    STACK("Freed memory allotted to stack");
     exit(0);
 }
 
-int getAddrForIdx(DataType t, int idx) {
-    int _count = (1 << 2) / getSize(t);
+int getWordForIdx(DataType t, int idx) {
+    int _count;
+    if (t == BOOLEAN) {
+        _count = (1 << 5) / getSize(t);
+    } else {
+        _count = (1 << 2) / getSize(t);
+    }
     int _idx = idx / _count;
     return _idx;
 }
 
 int getOffsetForIdx(DataType t, int idx) {
-    int _count = (1 << 2) / getSize(t);
+    int _count;
+    if (t == BOOLEAN) {
+        _count = (1 << 5) / getSize(t);
+    } else {
+        _count = (1 << 2) / getSize(t);
+    }
     int _idx = idx / _count;
     return (idx - _idx * _count) * getSize(t);
 }
 
 void createMem(size_t bytes) {
     LIBRARY("createMem called");
+    if (mem != NULL) {
+        throw runtime_error("createMem: Memory already created");
+    }
     mem = (Memory *)malloc(sizeof(Memory));
     if (mem->init(bytes) == -1) {
         throw runtime_error("createMem: Memory allocation failed");
@@ -510,7 +535,9 @@ void createMem(size_t bytes) {
     var_stack = (Stack *)malloc(sizeof(Stack));
     var_stack->init();
 
+    sem_init(&gc_sem, 0, 0);
     pthread_create(&gc_tid, NULL, gcThread, NULL);
+    sem_wait(&gc_sem);
 }
 
 MyType create(VarType var_type, DataType data_type, u_int len, u_int size_req) {
@@ -543,6 +570,7 @@ MyType create(VarType var_type, DataType data_type, u_int len, u_int size_req) {
 
 MyType createVar(DataType type) {
     LIBRARY("createVar called with type = %s", getDataTypeStr(type).c_str());
+    WORD_ALIGN("Creating variable, so memory required = 1 word");
     return create(PRIMITIVE, type, 1, 1);
 }
 
@@ -573,6 +601,7 @@ void assignVar(MyType &var, int val) {
             }
             memcpy(p, &val, 4);
         }
+        WORD_ALIGN("Data type = %s, wrote 1 word to memory", getDataTypeStr(var.data_type).c_str());
         UNLOCK(&mem->mutex);
     }
 }
@@ -588,6 +617,7 @@ void assignVar(MyType &var, char val) {
         int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
         int temp = (int)val;
         memcpy(p, &temp, 4);
+        WORD_ALIGN("Data type = char, wrote 1 word (1 byte data + 3 byte padding) to memory");
         UNLOCK(&mem->mutex);
     }
 }
@@ -603,6 +633,7 @@ void assignVar(MyType &var, bool val) {
         int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
         int temp = (int)val;
         memcpy(p, &temp, 4);
+        WORD_ALIGN("Data type = boolean, wrote 1 word (1 bit data + 3 byte, 7 bit padding) to memory");
         UNLOCK(&mem->mutex);
     }
 }
@@ -615,15 +646,18 @@ void readVar(MyType &var, void *ptr) {
     u_int idx = counterToIdx(var.ind);
     int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
     int t = *(int *)p;
+    WORD_ALIGN("Extracted entire 1 word from memory");
     if (var.data_type == MEDIUM_INT) {
         if (t & (1 << 23)) {
             t = t | 0xff000000;
         }
+        WORD_ALIGN("Appropriate sign bit padded for medium int");
     }
     if (var.data_type == MEDIUM_INT) {
         size++;
     }
     memcpy(ptr, &t, size);
+    WORD_ALIGN("Wrote %d bytes to the destination address", size);
     UNLOCK(&mem->mutex);
 }
 
@@ -635,9 +669,12 @@ MyType createArr(DataType type, int len) {
     u_int size_req;
     if (type == INT || type == MEDIUM_INT) {
         size_req = len;
-    } else {
+    } else if (type == CHAR) {
         size_req = (len + 3) >> 2;
+    } else if (type == BOOLEAN) {
+        size_req = (len + 31) >> 5;
     }
+    WORD_ALIGN("Creating array of type = %s, len = %d, memory required = %d words", getDataTypeStr(type).c_str(), len, size_req);
     return create(ARRAY, type, len, size_req);
 }
 
@@ -650,6 +687,7 @@ void assignArr(MyType &arr, int val[]) {
         LOCK(&mem->mutex);
         u_int idx = counterToIdx(arr.ind);
         int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
+        WORD_ALIGN("Data type = %s, writing 1 word chunks to memory", getDataTypeStr(arr.data_type).c_str());
         if (arr.data_type == INT) {
             for (size_t i = 0; i < arr.len; i++) {
                 memcpy(p + i, &val[i], 4);
@@ -675,6 +713,7 @@ void assignArr(MyType &arr, char val[]) {
         LOCK(&mem->mutex);
         u_int idx = counterToIdx(arr.ind);
         int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
+        WORD_ALIGN("Data type = char, writing 4 array elements into 1 word in memory");
         for (size_t i = 0; i < arr.len; i += 4) {
             u_int temp = 0;
             for (size_t j = 0; j < 4; j++) {
@@ -696,11 +735,12 @@ void assignArr(MyType &arr, bool val[]) {
         LOCK(&mem->mutex);
         u_int idx = counterToIdx(arr.ind);
         int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
+        WORD_ALIGN("Data type = boolean, writing 32 array elements into 1 word in memory");
         for (size_t i = 0; i < arr.len; i += 4) {
             u_int temp = 0;
-            for (size_t j = 0; j < 4; j++) {
-                bool b = (i + j < arr.len) ? val[i + j] : 0;
-                temp = temp | ((u_int)b << (j * 8));
+            for (size_t j = 0; j < 32; j++) {
+                bool c = (i * 8 + j < arr.len) ? val[i * 8 + j] : false;
+                temp = temp | ((u_int)c << j);
             }
             memcpy((char *)p + i, &temp, 4);
         }
@@ -720,6 +760,7 @@ void assignArr(MyType &arr, int index, int val) {
         LOCK(&mem->mutex);
         u_int idx = counterToIdx(arr.ind);
         int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
+        WORD_ALIGN("Data type = %s, reading 1 word from memory", getDataTypeStr(arr.data_type).c_str());
         if (arr.data_type == INT) {
             memcpy(p + index, &val, 4);
         } else if (arr.data_type == MEDIUM_INT) {
@@ -744,13 +785,15 @@ void assignArr(MyType &arr, int index, char val) {
         LOCK(&mem->mutex);
         u_int idx = counterToIdx(arr.ind);
         int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
-        int *q = p + getAddrForIdx(arr.data_type, index);
+        int *q = p + getWordForIdx(arr.data_type, index);
         int offset = getOffsetForIdx(arr.data_type, index);
+        WORD_ALIGN("Data type = char, reading entire 1 word memory");
         int temp = *q;
+        WORD_ALIGN("Changing byte no. %d in the word", offset);
         temp = temp & ~(0xff << (offset * 8));
         temp = temp | (val << (offset * 8));
+        WORD_ALIGN("Writing the word back to memory");
         memcpy(q, &temp, 4);
-        // memcpy((char *)p + index, &val, getSize(CHAR));
         UNLOCK(&mem->mutex);
     }
 }
@@ -767,18 +810,19 @@ void assignArr(MyType &arr, int index, bool val) {
         LOCK(&mem->mutex);
         u_int idx = counterToIdx(arr.ind);
         int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
-        int *q = p + getAddrForIdx(arr.data_type, index);
+        int *q = p + getWordForIdx(arr.data_type, index);
         int offset = getOffsetForIdx(arr.data_type, index);
+        WORD_ALIGN("Data type = char, reading entire 1 word memory");
         int temp = *q;
-        temp = temp & ~(0xff << (offset * 8));
-        temp = temp | (val << (offset * 8));
+        WORD_ALIGN("Changing bit no. %d in the word", offset);
+        temp = temp & ~(1 << offset);
+        temp = temp | (val << offset);
+        WORD_ALIGN("Writing the word back to memory");
         memcpy(q, &temp, 4);
-        // memcpy((char *)p + index, &val, getSize(BOOLEAN));
         UNLOCK(&mem->mutex);
     }
 }
 
-// TODO: add word alignment
 void readArr(MyType &arr, void *ptr) {
     LIBRARY("readArr called for array with counter = %d", arr.ind);
     validate(arr, ARRAY);
@@ -787,10 +831,12 @@ void readArr(MyType &arr, void *ptr) {
     u_int idx = counterToIdx(arr.ind);
     int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
     if (arr.data_type == INT) {
+        WORD_ALIGN("Data type = int, copying 1 word chunks from memory to the destination address");
         for (size_t i = 0; i < arr.len; i++) {
             memcpy((int *)ptr + i, p + i, size);
         }
     } else if (arr.data_type == MEDIUM_INT) {
+        WORD_ALIGN("Data type = medium int, copying 1 word chunks from memory to the destination address");
         for (size_t i = 0; i < arr.len; i++) {
             int temp = *(p + i);
             if (temp & (1 << 23)) {
@@ -798,32 +844,30 @@ void readArr(MyType &arr, void *ptr) {
             }
             memcpy((int *)ptr + i, &temp, size);
         }
-    } else {
-        size_t blocks = (arr.len >> 2);
+    } else if (arr.data_type == CHAR) {
+        WORD_ALIGN("Data type = char, copying 1 word chunks (= 4 array elements) from memory to the destination address");
+        size_t blocks = (arr.len + 3) >> 2;
         for (size_t i = 0; i < blocks; i++) {
-            memcpy((int *)ptr + i, p + i, 4);
+            u_int temp = *(p + i);
+            for (size_t j = 0; j < 4; j++) {
+                if (i * 4 + j < arr.len) {
+                    memcpy((char *)ptr + (i * 4 + j), &temp, 1);
+                    temp = temp >> 8;
+                }
+            }
         }
-        size_t rem = arr.len - (blocks << 2);
-        if (rem > 0) {
-            memcpy((int *)ptr + blocks, p + blocks, rem);
+    } else if (arr.data_type == BOOLEAN) {
+        WORD_ALIGN("Data type = boolean, copying 1 word chunks (= 32 array elements) from memory to the destination address");
+        size_t blocks = (((arr.len + 31) >> 5) << 5) >> 4;
+        for (size_t i = 0; i < blocks; i++) {
+            u_int temp = *(p + i);
+            for (size_t j = 0; j < 32; j++) {
+                if (i * 32 + j < arr.len) {
+                    *((bool *)ptr + i * 32 + j) = (temp & (1 << j)) != 0;
+                }
+            }
         }
     }
-
-    // for (size_t i = 0; i < arr.len; i++) {
-    //     if (arr.data_type == INT) {
-    //         memcpy((int *)ptr + i, p + i, size);
-    //     } else if (arr.data_type == MEDIUM_INT) {
-    //         int num_val = *(int *)(p + i);
-    //         if (num_val & (1 << 23)) {
-    //             num_val = num_val | 0xff000000;
-    //         }
-    //         memcpy((int *)ptr + i, &num_val, 4);
-    //     } else if (arr.data_type == CHAR) {
-    //         memcpy((char *)ptr + i, (char *)p + i, size);
-    //     } else if (arr.data_type == BOOLEAN) {
-    //         memcpy((bool *)ptr + i, (char *)p + i, size);
-    //     }
-    // }
     UNLOCK(&mem->mutex);
 }
 
@@ -837,19 +881,31 @@ void readArr(MyType &arr, int index, void *ptr) {
     LOCK(&mem->mutex);
     u_int idx = counterToIdx(arr.ind);
     int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
-    p = p + getAddrForIdx(arr.data_type, index);
+    int *q = p + getWordForIdx(arr.data_type, index);
     int offset = getOffsetForIdx(arr.data_type, index);
-    // DEBUG("p = %lu, index = %d, offset = %d", (u_long)p, index, offset);
-    int t = *p;
+    int t = *q;
+    WORD_ALIGN("Read 1 word from memory");
     if (arr.data_type == MEDIUM_INT) {
         if (t & (1 << 23)) {
             t = t | 0xff000000;
         }
+        WORD_ALIGN("Appropriate sign bit padded for medium int");
     }
     if (arr.data_type == MEDIUM_INT) {
         size++;
     }
-    memcpy(ptr, (char *)(&t) + offset, size);
+    if (arr.data_type == BOOLEAN) {
+        t = (t >> offset) & 1;
+        *(bool *)ptr = t;
+        WORD_ALIGN("Bit no. %d written to destination address for boolean", offset);
+    } else {
+        memcpy(ptr, (char *)(&t) + offset, size);
+        if (arr.data_type == CHAR) {
+            WORD_ALIGN("Data type = char, byte no. %d copied to destination address", offset);
+        } else {
+            WORD_ALIGN("Data type = %s, 1 word copied to destination address", getDataTypeStr(arr.data_type).c_str());
+        }
+    }
     UNLOCK(&mem->mutex);
 }
 
@@ -1105,12 +1161,12 @@ void testCompactionCall() {
 
 //     //     freeElem(arr);
 
-//     // MyType arr3 = createArr(CHAR, 5);
-//     // char arr3_val[] = {'a', 'b', 'c', 'd', 'e'};
+//     // MyType arr3 = createArr(CHAR, 10);
+//     // char arr3_val[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'};
 //     // assignArr(arr3, arr3_val);
-//     // char arr3_val_read[5];
+//     // char arr3_val_read[10];
 //     // readArr(arr3, arr3_val_read);
-//     // for (size_t i = 0; i < 5; i++) {
+//     // for (size_t i = 0; i < 10; i++) {
 //     //     DEBUG("arr3_val_read[%zu] = %c", i, arr3_val_read[i]);
 //     // }
 //     // printf("\n");
@@ -1126,25 +1182,33 @@ void testCompactionCall() {
 //     //     DEBUG("arr3_val_read[%zu] = %c", i, cc);
 //     // }
 
-//     MyType arr = createArr(BOOLEAN, 5);
+//     MyType arr = createArr(BOOLEAN, 40);
 //     arr.print();
-//     bool arr_val[] = {true, false, true, false, true};
+//     bool arr_val[40];
+//     for (size_t i = 0; i < 40; i++) {
+//         arr_val[i] = i % 2;
+//     }
 //     assignArr(arr, arr_val);
-//     bool arr_val_read[5];
+//     bool arr_val_read[40];
 //     readArr(arr, arr_val_read);
-//     for (size_t i = 0; i < 5; i++) {
+//     for (size_t i = 0; i < 40; i++) {
 //         DEBUG("arr_val_read[%zu] = %d", i, arr_val_read[i]);
 //     }
 //     // printf("\n");
+//     // for (size_t i = 0; i < 40; i++) {
+//     //     assignArr(arr, i, !arr_val[i]);
+//     // }
 //     // assignArr(arr, 0, false);
 //     // assignArr(arr, 1, true);
 //     // assignArr(arr, 2, false);
 //     // assignArr(arr, 3, true);
-//     // assignArr(arr, 4, false);
+//     // assignArr(arr, 35, false);
 //     // readArr(arr, arr_val_read);
-//     // for (size_t i = 0; i < 5; i++) {
-//     //     DEBUG("arr_val_read[%zu] = %d", i, arr_val_read[i]);
-//     // }
+//     for (size_t i = 0; i < 40; i++) {
+//         bool bb;
+//         readArr(arr, i, &bb);
+//         DEBUG("arr_val_read[%zu] = %d", i, bb);
+//     }
 
-//     // cleanExit();
+//     cleanExit();
 // }

@@ -34,7 +34,7 @@ int fibonacciProduct(MyType k) {
     for (int i = 0; i < k_val; i++) {
         int fib_val;
         readArr(fib, i, &fib_val);
-        printf("%d\n", fib_val);
+        // printf("%d\n", fib_val);
         prod *= fib_val;
     }
     endScope();
@@ -51,6 +51,7 @@ int main(int argc, char* argv[]) {
     readVar(k, &k_val);
     long long prod = fibonacciProduct(k);
     printf("The product of the first %d fibonacci numbers is %lld\n", k_val, prod);
+    fflush(stdout);
     endScope();
     gcActivate();
     cleanExit();
