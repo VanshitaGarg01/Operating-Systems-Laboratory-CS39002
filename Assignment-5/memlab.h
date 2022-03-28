@@ -8,6 +8,9 @@
 
 using namespace std;
 
+const int MEDIUM_INT_MAX = (1 << 23) - 1;
+const int MEDIUM_INT_MIN = -(1 << 23);
+
 enum VarType {
     PRIMITIVE,
     ARRAY
@@ -47,6 +50,48 @@ inline string getDataTypeStr(DataType data_type) {
         return "unknown";
     }
 }
+
+class medium_int {
+   public:
+    char data[3];
+
+    medium_int() {
+        data[0] = 0;
+        data[1] = 0;
+        data[2] = 0;
+    }
+
+    medium_int(int val) {
+        if (val < MEDIUM_INT_MIN || val > MEDIUM_INT_MAX) {
+            printf("[WARNING] Variable is of type medium int, value is out of range, compressing\n");
+        }
+        data[0] = val & 0xff;
+        data[1] = (val >> 8) & 0xff;
+        data[2] = (val >> 16) & 0xff;
+    }
+
+    int medIntToInt() {
+        int val = 0;
+        val |= data[0];
+        val |= (data[1] << 8);
+        val |= (data[2] << 16);
+        int sign_bit = (val >> 23) & 1;
+        if (sign_bit == 1) {
+            val |= 0xff000000;
+        }
+        return val;
+    }
+
+    medium_int &operator=(int val) {
+        if (val < MEDIUM_INT_MIN || val > MEDIUM_INT_MAX) {
+            printf("[WARNING] Variable is of type medium int, value is out of range, compressing\n");
+        }
+        data[0] = val & 0xff;
+        data[1] = (val >> 8) & 0xff;
+        data[2] = (val >> 16) & 0xff;
+        return *this;
+    }
+};
 
 struct MyType {
     const int ind;

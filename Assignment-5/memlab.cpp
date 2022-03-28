@@ -36,9 +36,6 @@ typedef long unsigned int u_long;
 const size_t MAX_PT_ENTRIES = 1024;
 const size_t MAX_STACK_SIZE = 1024;
 
-const int MEDIUM_INT_MAX = (1 << 23) - 1;
-const int MEDIUM_INT_MIN = -(1 << 23);
-
 const int GC_SLEEP_MS = 50;
 const double COMPACTION_RATIO_THRESHOLD = 2;
 
@@ -1037,178 +1034,178 @@ void testCompactionCall() {
     }
 }
 
-// int main() {
-//     createMem(120);
+int main() {
+    createMem(120);
 
-//     // testCode();
-//     // testCompactionCall();
+    // testCode();
+    // testCompactionCall();
 
-//     // MyType aa = createVar(INT);
-//     // aa.print();
-//     // assignVar(aa, -19);
-//     // int x;
-//     // readVar(aa, &x);
-//     // DEBUG("value of aa = %d", x);
+    // MyType aa = createVar(INT);
+    // aa.print();
+    // assignVar(aa, -19);
+    // int x;
+    // readVar(aa, &x);
+    // DEBUG("value of aa = %d", x);
 
-//     // int *p = mem->start;
-//     // printf("%d, %d\n", *p >> 1, *p & 1);
-//     // printf("%d, %d\n", *(p + 2) >> 1, *(p + 2) & 1);
-//     // printf("%d, %d\n", *(p + 3) >> 1, *(p + 3) & 1);
+    // int *p = mem->start;
+    // printf("%d, %d\n", *p >> 1, *p & 1);
+    // printf("%d, %d\n", *(p + 2) >> 1, *(p + 2) & 1);
+    // printf("%d, %d\n", *(p + 3) >> 1, *(p + 3) & 1);
 
-//     // MyType a = createVar(CHAR);
-//     // a.print();
-//     // page_table->pt[counterToIdx(a.ind)].print();
-//     // assignVar(a, 'b');
-//     // char v;
-//     // readVar(a, &v);
-//     // DEBUG("value of a = %c", v);
+    // MyType a = createVar(CHAR);
+    // a.print();
+    // page_table->pt[counterToIdx(a.ind)].print();
+    // assignVar(a, 'b');
+    // char v;
+    // readVar(a, &v);
+    // DEBUG("value of a = %c", v);
 
-//     // MyType b = createVar(BOOLEAN);
-//     // b.print();
-//     // page_table->pt[counterToIdx(b.ind)].print();
-//     // assignVar(b, false);
-//     // bool xx;
-//     // readVar(b, &xx);
-//     // // cout << xx << endl;
-//     // DEBUG("value of b = %d", xx);
+    // MyType b = createVar(BOOLEAN);
+    // b.print();
+    // page_table->pt[counterToIdx(b.ind)].print();
+    // assignVar(b, false);
+    // bool xx;
+    // readVar(b, &xx);
+    // // cout << xx << endl;
+    // DEBUG("value of b = %d", xx);
 
-//     // MyType bb = createVar(MEDIUM_INT);
-//     // bb.print();
-//     // assignVar(bb, -19);
-//     // int y;
-//     // readVar(bb, &y);
-//     // DEBUG("value of bb = %d", y);
+    MyType bb = createVar(MEDIUM_INT);
+    bb.print();
+    assignVar(bb, INT32_MIN);
+    int y;
+    readVar(bb, &y);
+    DEBUG("value of bb = %d", y);
 
-//     // MyType arr1 = createArr(INT, 5);
-//     // arr1.print();
-//     // int arr1_val[] = {1, 2, -3, 4, -5};
-//     // assignArr(arr1, arr1_val);
-//     // int arr1_val_read[5];
-//     // readArr(arr1, arr1_val_read);
-//     // for (size_t i = 0; i < 5; i++) {
-//     //     DEBUG("arr_val_read[%zu] = %d", i, arr1_val_read[i]);
-//     // }
-//     // assignArr(arr1, 0, -6);
-//     // assignArr(arr1, 1, -7);
-//     // assignArr(arr1, 2, -8);
-//     // assignArr(arr1, 3, -9);
-//     // assignArr(arr1, 4, 25);
-//     // readArr(arr1, arr1_val_read);
-//     // for (size_t i = 0; i < 5; i++) {
-//     //     DEBUG("arr_val_read[%zu] = %d", i, arr1_val_read[i]);
-//     // }
-//     // int v;
-//     // readArr(arr1, 0, &v);
-//     // DEBUG("%d", v);
-//     // readArr(arr1, 1, &v);
-//     // DEBUG("%d", v);
-//     // readArr(arr1, 2, &v);
-//     // DEBUG("%d", v);
-//     // readArr(arr1, 3, &v);
-//     // DEBUG("%d", v);
-//     // readArr(arr1, 4, &v);
-//     // DEBUG("%d", v);
+    // MyType arr1 = createArr(INT, 5);
+    // arr1.print();
+    // int arr1_val[] = {1, 2, -3, 4, -5};
+    // assignArr(arr1, arr1_val);
+    // int arr1_val_read[5];
+    // readArr(arr1, arr1_val_read);
+    // for (size_t i = 0; i < 5; i++) {
+    //     DEBUG("arr_val_read[%zu] = %d", i, arr1_val_read[i]);
+    // }
+    // assignArr(arr1, 0, -6);
+    // assignArr(arr1, 1, -7);
+    // assignArr(arr1, 2, -8);
+    // assignArr(arr1, 3, -9);
+    // assignArr(arr1, 4, 25);
+    // readArr(arr1, arr1_val_read);
+    // for (size_t i = 0; i < 5; i++) {
+    //     DEBUG("arr_val_read[%zu] = %d", i, arr1_val_read[i]);
+    // }
+    // int v;
+    // readArr(arr1, 0, &v);
+    // DEBUG("%d", v);
+    // readArr(arr1, 1, &v);
+    // DEBUG("%d", v);
+    // readArr(arr1, 2, &v);
+    // DEBUG("%d", v);
+    // readArr(arr1, 3, &v);
+    // DEBUG("%d", v);
+    // readArr(arr1, 4, &v);
+    // DEBUG("%d", v);
 
-//     // MyType arr = createArr(MEDIUM_INT, 5);
-//     // arr.print();
-//     // int arr_val[] = {1, 2, -3, 4, -5};
-//     // assignArr(arr, arr_val);
-//     // int arr_val_read[5];
-//     // readArr(arr, arr_val_read);
-//     // for (size_t i = 0; i < 5; i++) {
-//     //     DEBUG("arr_val_read[%zu] = %d", i, arr_val_read[i]);
-//     // }
-//     // printf("\n");
-//     // assignArr(arr, 0, -6);
-//     // assignArr(arr, 1, 7);
-//     // assignArr(arr, 2, -8);
-//     // assignArr(arr, 3, 9);
-//     // assignArr(arr, 4, 25);
-//     // readArr(arr, arr_val_read);
-//     // for (size_t i = 0; i < 5; i++) {
-//     //     DEBUG("arr_val_read[%zu] = %d", i, arr_val_read[i]);
-//     // }
-//     // int v;
-//     // readArr(arr, 0, &v);
-//     // DEBUG("%d", v);
-//     // readArr(arr, 1, &v);
-//     // DEBUG("%d", v);
-//     // readArr(arr, 2, &v);
-//     // DEBUG("%d", v);
-//     // readArr(arr, 3, &v);
-//     // DEBUG("%d", v);
-//     // readArr(arr, 4, &v);
-//     // DEBUG("%d", v);
+    // MyType arr = createArr(MEDIUM_INT, 5);
+    // arr.print();
+    // int arr_val[] = {1, 2, -3, 4, -5};
+    // assignArr(arr, arr_val);
+    // int arr_val_read[5];
+    // readArr(arr, arr_val_read);
+    // for (size_t i = 0; i < 5; i++) {
+    //     DEBUG("arr_val_read[%zu] = %d", i, arr_val_read[i]);
+    // }
+    // printf("\n");
+    // assignArr(arr, 0, -6);
+    // assignArr(arr, 1, 7);
+    // assignArr(arr, 2, -8);
+    // assignArr(arr, 3, 9);
+    // assignArr(arr, 4, 25);
+    // readArr(arr, arr_val_read);
+    // for (size_t i = 0; i < 5; i++) {
+    //     DEBUG("arr_val_read[%zu] = %d", i, arr_val_read[i]);
+    // }
+    // int v;
+    // readArr(arr, 0, &v);
+    // DEBUG("%d", v);
+    // readArr(arr, 1, &v);
+    // DEBUG("%d", v);
+    // readArr(arr, 2, &v);
+    // DEBUG("%d", v);
+    // readArr(arr, 3, &v);
+    // DEBUG("%d", v);
+    // readArr(arr, 4, &v);
+    // DEBUG("%d", v);
 
-//     // MyType arr2 = createArr(INT, 5);
-//     // arr2.print();
-//     // int arr2_val[] = {1, 2, -3, 4, -5};
-//     // assignArr(arr2, arr2_val);
-//     // int arr2_val_read[5];
-//     // readArr(arr2, arr2_val_read);
-//     // for (size_t i = 0; i < 5; i++) {
-//     //     DEBUG("arr_val_read[%zu] = %d", i, arr2_val_read[i]);
-//     // }
-//     //     assignArr(arr2, 0, -6);
-//     //     assignArr(arr2, 1, -7);
-//     //     assignArr(arr2, 2, -8);
-//     //     assignArr(arr2, 3, -9);
-//     //     assignArr(arr2, 4, 25);
-//     //     readArr(arr2, arr2_val_read);
-//     //     // for (size_t i = 0; i < 5; i++) {
-//     //     //     DEBUG("arr_val_read[%zu] = %d", i, arr2_val_read[i]);
-//     //     // }
+    // MyType arr2 = createArr(INT, 5);
+    // arr2.print();
+    // int arr2_val[] = {1, 2, -3, 4, -5};
+    // assignArr(arr2, arr2_val);
+    // int arr2_val_read[5];
+    // readArr(arr2, arr2_val_read);
+    // for (size_t i = 0; i < 5; i++) {
+    //     DEBUG("arr_val_read[%zu] = %d", i, arr2_val_read[i]);
+    // }
+    //     assignArr(arr2, 0, -6);
+    //     assignArr(arr2, 1, -7);
+    //     assignArr(arr2, 2, -8);
+    //     assignArr(arr2, 3, -9);
+    //     assignArr(arr2, 4, 25);
+    //     readArr(arr2, arr2_val_read);
+    //     // for (size_t i = 0; i < 5; i++) {
+    //     //     DEBUG("arr_val_read[%zu] = %d", i, arr2_val_read[i]);
+    //     // }
 
-//     //     freeElem(arr);
+    //     freeElem(arr);
 
-//     // MyType arr3 = createArr(CHAR, 10);
-//     // char arr3_val[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'};
-//     // assignArr(arr3, arr3_val);
-//     // char arr3_val_read[10];
-//     // readArr(arr3, arr3_val_read);
-//     // for (size_t i = 0; i < 10; i++) {
-//     //     DEBUG("arr3_val_read[%zu] = %c", i, arr3_val_read[i]);
-//     // }
-//     // printf("\n");
-//     // assignArr(arr3, 0, 'f');
-//     // assignArr(arr3, 1, 'g');
-//     // assignArr(arr3, 2, 'h');
-//     // assignArr(arr3, 3, 'i');
-//     // assignArr(arr3, 4, 'j');
-//     // // readArr(arr3, arr3_val_read);
-//     // for (size_t i = 0; i < 5; i++) {
-//     //     char cc;
-//     //     readArr(arr3, i, &cc);
-//     //     DEBUG("arr3_val_read[%zu] = %c", i, cc);
-//     // }
+    // MyType arr3 = createArr(CHAR, 10);
+    // char arr3_val[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'};
+    // assignArr(arr3, arr3_val);
+    // char arr3_val_read[10];
+    // readArr(arr3, arr3_val_read);
+    // for (size_t i = 0; i < 10; i++) {
+    //     DEBUG("arr3_val_read[%zu] = %c", i, arr3_val_read[i]);
+    // }
+    // printf("\n");
+    // assignArr(arr3, 0, 'f');
+    // assignArr(arr3, 1, 'g');
+    // assignArr(arr3, 2, 'h');
+    // assignArr(arr3, 3, 'i');
+    // assignArr(arr3, 4, 'j');
+    // // readArr(arr3, arr3_val_read);
+    // for (size_t i = 0; i < 5; i++) {
+    //     char cc;
+    //     readArr(arr3, i, &cc);
+    //     DEBUG("arr3_val_read[%zu] = %c", i, cc);
+    // }
 
-//     MyType arr = createArr(BOOLEAN, 40);
-//     arr.print();
-//     bool arr_val[40];
-//     for (size_t i = 0; i < 40; i++) {
-//         arr_val[i] = i % 2;
-//     }
-//     assignArr(arr, arr_val);
-//     bool arr_val_read[40];
-//     readArr(arr, arr_val_read);
-//     for (size_t i = 0; i < 40; i++) {
-//         DEBUG("arr_val_read[%zu] = %d", i, arr_val_read[i]);
-//     }
-//     // printf("\n");
-//     // for (size_t i = 0; i < 40; i++) {
-//     //     assignArr(arr, i, !arr_val[i]);
-//     // }
-//     // assignArr(arr, 0, false);
-//     // assignArr(arr, 1, true);
-//     // assignArr(arr, 2, false);
-//     // assignArr(arr, 3, true);
-//     // assignArr(arr, 35, false);
-//     // readArr(arr, arr_val_read);
-//     for (size_t i = 0; i < 40; i++) {
-//         bool bb;
-//         readArr(arr, i, &bb);
-//         DEBUG("arr_val_read[%zu] = %d", i, bb);
-//     }
+    // MyType arr = createArr(BOOLEAN, 40);
+    // arr.print();
+    // bool arr_val[40];
+    // for (size_t i = 0; i < 40; i++) {
+    //     arr_val[i] = i % 2;
+    // }
+    // assignArr(arr, arr_val);
+    // bool arr_val_read[40];
+    // readArr(arr, arr_val_read);
+    // for (size_t i = 0; i < 40; i++) {
+    //     DEBUG("arr_val_read[%zu] = %d", i, arr_val_read[i]);
+    // }
+    // printf("\n");
+    // for (size_t i = 0; i < 40; i++) {
+    //     assignArr(arr, i, !arr_val[i]);
+    // }
+    // assignArr(arr, 0, false);
+    // assignArr(arr, 1, true);
+    // assignArr(arr, 2, false);
+    // assignArr(arr, 3, true);
+    // assignArr(arr, 35, false);
+    // readArr(arr, arr_val_read);
+    // for (size_t i = 0; i < 40; i++) {
+    //     bool bb;
+    //     readArr(arr, i, &bb);
+    //     DEBUG("arr_val_read[%zu] = %d", i, bb);
+    // }
 
-//     cleanExit();
-// }
+    cleanExit();
+}
