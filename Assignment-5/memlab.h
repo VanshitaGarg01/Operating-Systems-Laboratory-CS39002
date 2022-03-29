@@ -8,6 +8,8 @@
 
 using namespace std;
 
+#define WARNING(msg, ...) printf("\x1b[31m[WARNING] " msg "\x1b[0m\n", ##__VA_ARGS__);
+
 const int MEDIUM_INT_MAX = (1 << 23) - 1;
 const int MEDIUM_INT_MIN = -(1 << 23);
 
@@ -63,7 +65,7 @@ class medium_int {
 
     medium_int(int val) {
         if (val < MEDIUM_INT_MIN || val > MEDIUM_INT_MAX) {
-            printf("[WARNING] Variable is of type medium int, value is out of range, compressing\n");
+            WARNING("Variable is of type medium int, value is out of range, compressing\n");
         }
         data[0] = val & 0xff;
         data[1] = (val >> 8) & 0xff;
@@ -84,7 +86,7 @@ class medium_int {
 
     medium_int &operator=(int val) {
         if (val < MEDIUM_INT_MIN || val > MEDIUM_INT_MAX) {
-            printf("[WARNING] Variable is of type medium int, value is out of range, compressing\n");
+            WARNING("Variable is of type medium int, value is out of range, compressing\n");
         }
         data[0] = val & 0xff;
         data[1] = (val >> 8) & 0xff;

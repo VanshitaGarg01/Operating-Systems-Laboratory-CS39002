@@ -11,7 +11,6 @@ using namespace std;
 #ifndef NOLOGS
 #define DEBUG(msg, ...) printf("\x1b[32m[DEBUG] " msg " \x1b[0m\n", ##__VA_ARGS__);
 #define ERROR(msg, ...) printf("\x1b[31m[ERROR] " msg " \x1b[0m\n", ##__VA_ARGS__);
-#define WARNING(msg, ...) printf("\x1b[31m[WARNING] " msg "\x1b[0m\n", ##__VA_ARGS__);
 #define LIBRARY(msg, ...) printf("\x1b[32m[LIBRARY] " msg " \x1b[0m\n", ##__VA_ARGS__);
 #define PAGE_TABLE(msg, ...) printf("\x1b[33m[PAGE TABLE] " msg " \x1b[0m\n", ##__VA_ARGS__);
 #define WORD_ALIGN(msg, ...) printf("\x1b[34m[WORD ALIGNMENT] " msg " \x1b[0m\n", ##__VA_ARGS__);
@@ -21,7 +20,6 @@ using namespace std;
 #else
 #define DEBUG(msg, ...)
 #define ERROR(msg, ...)
-#define WARNING(msg, ...)
 #define LIBRARY(msg, ...)
 #define PAGE_TABLE(msg, ...)
 #define WORD_ALIGN(msg, ...)
@@ -400,29 +398,25 @@ void compactMemory() {
 }
 
 void gcRun() {
+    LOCK(&mem->mutex);
+    LOCK(&page_table->mutex);
     GC("gcRun called");
     for (size_t i = 0; i < MAX_PT_ENTRIES; i++) {
-        LOCK(&mem->mutex);
-        LOCK(&page_table->mutex);
         if (page_table->pt[i].valid && !page_table->pt[i].marked) {
             freeElem(i);
         }
-        UNLOCK(&page_table->mutex);
-        UNLOCK(&mem->mutex);
     }
-
     double ratio = (double)mem->totalFree / (double)(mem->currMaxFree + 1);
     GC("Ratio = %f", ratio);
     if (ratio >= COMPACTION_RATIO_THRESHOLD) {
         GC("Ratio more than compaction ratio threshold");
-        LOCK(&mem->mutex);
-        LOCK(&page_table->mutex);
         GC("Before compaction: Total free memory = %ld, Largest free block = %ld, No. of free blocks = %d", mem->totalFree, mem->currMaxFree, mem->numFreeBlocks);
         compactMemory();
         GC("Before compaction: Total free memory = %ld, Largest free block = %ld, No. of free blocks = %d", mem->totalFree, mem->currMaxFree, mem->numFreeBlocks);
-        UNLOCK(&page_table->mutex);
-        UNLOCK(&mem->mutex);
     }
+    GC("gcRun finished");
+    UNLOCK(&page_table->mutex);
+    UNLOCK(&mem->mutex);
 }
 
 void gcActivate() {
@@ -571,73 +565,84 @@ MyType createVar(DataType type) {
     return create(PRIMITIVE, type, 1, 1);
 }
 
-void validate(MyType &var, VarType type) {
+void validate(MyType &var, VarType type, DataType d_type, bool index = false) {
+    string vt = (type == PRIMITIVE ? "Var" : "Arr");
+    string s = "";
+    if (type == ARRAY) {
+        if (!index) {
+            s = "[]";
+        } else {
+            s = "[], index";
+        }
+    }
+    string func = "assign" + vt + " (" + getDataTypeStr(d_type) + s + "): ";
     if (var.var_type != type) {
         string str = (type == PRIMITIVE ? "primitive" : "array");
-        throw runtime_error("create: Variable is not a " + str);
+        throw runtime_error(func + "Variable is not a " + str);
+    }
+    if (var.data_type != d_type) {
+        throw runtime_error(func + "Type mismatch. Data type of variable is " + getDataTypeStr(var.data_type));
     }
     if (!page_table->pt[counterToIdx(var.ind)].valid) {
-        throw runtime_error("create: Variable is not valid");
+        throw runtime_error(func + "Variable is not valid");
     }
 }
 
 void assignVar(MyType &var, int val) {
     LIBRARY("assignVar (int) called for variable with counter = %d and value = %d", var.ind, val);
-    validate(var, PRIMITIVE);
-    if (var.data_type != INT && var.data_type != MEDIUM_INT) {
-        throw runtime_error("assignVar (int): Type mismatch. Data type of variable is " + getDataTypeStr(var.data_type));
-    } else {
-        LOCK(&mem->mutex);
-        u_int idx = counterToIdx(var.ind);
-        int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
-        if (var.data_type == INT) {
-            memcpy(p, &val, 4);
-        } else if (var.data_type == MEDIUM_INT) {
-            if (val < MEDIUM_INT_MIN || val > MEDIUM_INT_MAX) {
-                WARNING("assignVar (int): Variable is of type medium int, value is out of range, compressing");
-            }
-            memcpy(p, &val, 4);
-        }
-        WORD_ALIGN("Data type = %s, wrote 1 word to memory", getDataTypeStr(var.data_type).c_str());
-        UNLOCK(&mem->mutex);
-    }
+    validate(var, PRIMITIVE, INT);
+    LOCK(&mem->mutex);
+    u_int idx = counterToIdx(var.ind);
+    int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
+    memcpy(p, &val, 4);
+    WORD_ALIGN("Data type = %s, wrote 1 word to memory", getDataTypeStr(var.data_type).c_str());
+    UNLOCK(&mem->mutex);
+}
+
+void assignVar(MyType &var, medium_int val) {
+    LIBRARY("assignVar (medium int) called for variable with counter = %d and value = %d", var.ind, val.medIntToInt());
+    validate(var, PRIMITIVE, MEDIUM_INT);
+    LOCK(&mem->mutex);
+    u_int idx = counterToIdx(var.ind);
+    int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
+    int temp = val.medIntToInt();
+    memcpy(p, &temp, 4);
+    WORD_ALIGN("Data type = %s, wrote 1 word to memory", getDataTypeStr(var.data_type).c_str());
+    UNLOCK(&mem->mutex);
 }
 
 void assignVar(MyType &var, char val) {
     LIBRARY("assignVar (char) called for variable with counter = %d and value = %c", var.ind, val);
-    validate(var, PRIMITIVE);
-    if (var.data_type != CHAR) {
-        throw runtime_error("assignVar (char): Type mismatch. Data type of variable is " + getDataTypeStr(var.data_type));
-    } else {
-        LOCK(&mem->mutex);
-        u_int idx = counterToIdx(var.ind);
-        int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
-        int temp = (int)val;
-        memcpy(p, &temp, 4);
-        WORD_ALIGN("Data type = char, wrote 1 word (1 byte data + 3 byte padding) to memory");
-        UNLOCK(&mem->mutex);
-    }
+    validate(var, PRIMITIVE, CHAR);
+    LOCK(&mem->mutex);
+    u_int idx = counterToIdx(var.ind);
+    int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
+    int temp = (int)val;
+    memcpy(p, &temp, 4);
+    WORD_ALIGN("Data type = char, wrote 1 word (1 byte data + 3 byte padding) to memory");
+    UNLOCK(&mem->mutex);
 }
 
 void assignVar(MyType &var, bool val) {
     LIBRARY("assignVar (bool) called for variable with counter = %d and value = %d", var.ind, val);
-    validate(var, PRIMITIVE);
-    if (var.data_type != BOOLEAN) {
-        throw runtime_error("assignVar (bool): Type mismatch. Data type of variable is " + getDataTypeStr(var.data_type));
-    } else {
-        LOCK(&mem->mutex);
-        u_int idx = counterToIdx(var.ind);
-        int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
-        int temp = (int)val;
-        memcpy(p, &temp, 4);
-        WORD_ALIGN("Data type = boolean, wrote 1 word (1 bit data + 3 byte, 7 bit padding) to memory");
-        UNLOCK(&mem->mutex);
-    }
+    validate(var, PRIMITIVE, BOOLEAN);
+    LOCK(&mem->mutex);
+    u_int idx = counterToIdx(var.ind);
+    int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
+    int temp = (int)val;
+    memcpy(p, &temp, 4);
+    WORD_ALIGN("Data type = boolean, wrote 1 word (1 bit data + 3 byte, 7 bit padding) to memory");
+    UNLOCK(&mem->mutex);
 }
 
 void readVar(MyType &var, void *ptr) {
     LIBRARY("readVar called for variable with counter = %d", var.ind);
-    validate(var, PRIMITIVE);
+    if (var.var_type != PRIMITIVE) {
+        throw runtime_error("readVar: Variable is not a primitive");
+    }
+    if (!page_table->pt[counterToIdx(var.ind)].valid) {
+        throw runtime_error("readVar: Variable is not valid");
+    }
     int size = getSize(var.data_type);
     LOCK(&mem->mutex);
     u_int idx = counterToIdx(var.ind);
@@ -645,15 +650,11 @@ void readVar(MyType &var, void *ptr) {
     int t = *(int *)p;
     WORD_ALIGN("Extracted entire 1 word from memory");
     if (var.data_type == MEDIUM_INT) {
-        if (t & (1 << 23)) {
-            t = t | 0xff000000;
-        }
-        WORD_ALIGN("Appropriate sign bit padded for medium int");
+        medium_int temp(t);
+        memcpy(ptr, &temp, size);
+    } else {
+        memcpy(ptr, &t, size);
     }
-    if (var.data_type == MEDIUM_INT) {
-        size++;
-    }
-    memcpy(ptr, &t, size);
     WORD_ALIGN("Wrote %d bytes to the destination address", size);
     UNLOCK(&mem->mutex);
 }
@@ -677,152 +678,146 @@ MyType createArr(DataType type, int len) {
 
 void assignArr(MyType &arr, int val[]) {
     LIBRARY("assignArr (int) called for array with counter = %d", arr.ind);
-    validate(arr, ARRAY);
-    if (arr.data_type != INT && arr.data_type != MEDIUM_INT) {
-        throw runtime_error("assignArr (int[]): Type mismatch. Data type of variable is " + getDataTypeStr(arr.data_type));
-    } else {
-        LOCK(&mem->mutex);
-        u_int idx = counterToIdx(arr.ind);
-        int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
-        WORD_ALIGN("Data type = %s, writing 1 word chunks to memory", getDataTypeStr(arr.data_type).c_str());
-        if (arr.data_type == INT) {
-            for (size_t i = 0; i < arr.len; i++) {
-                memcpy(p + i, &val[i], 4);
-            }
-        } else if (arr.data_type == MEDIUM_INT) {
-            for (size_t i = 0; i < arr.len; i++) {
-                if (val[i] < MEDIUM_INT_MIN || val[i] > MEDIUM_INT_MAX) {
-                    WARNING("Variable at index %zu is of type medium int, value is out of range, compressing", i);
-                }
-                memcpy(p + i, &val[i], 4);
-            }
-        }
-        UNLOCK(&mem->mutex);
+    validate(arr, ARRAY, INT);
+    LOCK(&mem->mutex);
+    u_int idx = counterToIdx(arr.ind);
+    int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
+    WORD_ALIGN("Data type = %s, writing 1 word chunks to memory", getDataTypeStr(arr.data_type).c_str());
+    for (size_t i = 0; i < arr.len; i++) {
+        memcpy(p + i, &val[i], 4);
     }
+    UNLOCK(&mem->mutex);
+}
+
+void assignArr(MyType &arr, medium_int val[]) {
+    LIBRARY("assignArr (medium int) called for array with counter = %d", arr.ind);
+    validate(arr, ARRAY, MEDIUM_INT);
+    LOCK(&mem->mutex);
+    u_int idx = counterToIdx(arr.ind);
+    int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
+    WORD_ALIGN("Data type = %s, writing 1 word chunks to memory", getDataTypeStr(arr.data_type).c_str());
+    for (size_t i = 0; i < arr.len; i++) {
+        int temp = val[i].medIntToInt();
+        memcpy(p + i, &temp, 4);
+    }
+    UNLOCK(&mem->mutex);
 }
 
 void assignArr(MyType &arr, char val[]) {
     LIBRARY("assignArr (char) called for array with counter = %d", arr.ind);
-    validate(arr, ARRAY);
-    if (arr.data_type != CHAR) {
-        throw runtime_error("assignArr (char[]): Type mismatch. Data type of variable is " + getDataTypeStr(arr.data_type));
-    } else {
-        LOCK(&mem->mutex);
-        u_int idx = counterToIdx(arr.ind);
-        int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
-        WORD_ALIGN("Data type = char, writing 4 array elements into 1 word in memory");
-        for (size_t i = 0; i < arr.len; i += 4) {
-            u_int temp = 0;
-            for (size_t j = 0; j < 4; j++) {
-                char c = (i + j < arr.len) ? val[i + j] : 0;
-                temp = temp | ((u_int)c << (j * 8));
-            }
-            memcpy((char *)p + i, &temp, 4);
+    validate(arr, ARRAY, CHAR);
+    LOCK(&mem->mutex);
+    u_int idx = counterToIdx(arr.ind);
+    int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
+    WORD_ALIGN("Data type = char, writing 4 array elements into 1 word in memory");
+    for (size_t i = 0; i < arr.len; i += 4) {
+        u_int temp = 0;
+        for (size_t j = 0; j < 4; j++) {
+            char c = (i + j < arr.len) ? val[i + j] : 0;
+            temp = temp | ((u_int)c << (j * 8));
         }
-        UNLOCK(&mem->mutex);
+        memcpy((char *)p + i, &temp, 4);
     }
+    UNLOCK(&mem->mutex);
 }
 
 void assignArr(MyType &arr, bool val[]) {
     LIBRARY("assignArr (bool) called for array with counter = %d", arr.ind);
-    validate(arr, ARRAY);
-    if (arr.data_type != BOOLEAN) {
-        throw runtime_error("assignArr (bool[]): Type mismatch. Data type of variable is " + getDataTypeStr(arr.data_type));
-    } else {
-        LOCK(&mem->mutex);
-        u_int idx = counterToIdx(arr.ind);
-        int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
-        WORD_ALIGN("Data type = boolean, writing 32 array elements into 1 word in memory");
-        for (size_t i = 0; i < arr.len; i += 4) {
-            u_int temp = 0;
-            for (size_t j = 0; j < 32; j++) {
-                bool c = (i * 8 + j < arr.len) ? val[i * 8 + j] : false;
-                temp = temp | ((u_int)c << j);
-            }
-            memcpy((char *)p + i, &temp, 4);
+    validate(arr, ARRAY, BOOLEAN);
+    LOCK(&mem->mutex);
+    u_int idx = counterToIdx(arr.ind);
+    int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
+    WORD_ALIGN("Data type = boolean, writing 32 array elements into 1 word in memory");
+    for (size_t i = 0; i < arr.len; i += 4) {
+        u_int temp = 0;
+        for (size_t j = 0; j < 32; j++) {
+            bool c = (i * 8 + j < arr.len) ? val[i * 8 + j] : false;
+            temp = temp | ((u_int)c << j);
         }
-        UNLOCK(&mem->mutex);
+        memcpy((char *)p + i, &temp, 4);
     }
+    UNLOCK(&mem->mutex);
 }
 
 void assignArr(MyType &arr, int index, int val) {
-    LIBRARY("assignArr (int) called for array with counter = %d at index = %d and value = %d", arr.ind, index, val);
-    validate(arr, ARRAY);
+    LIBRARY("assignArr (int[], index) called for array with counter = %d at index = %d and value = %d", arr.ind, index, val);
+    validate(arr, ARRAY, INT, true);
     if (index < 0 || index >= (int)arr.len) {
-        throw runtime_error("assignArr (index, int): Index out of range");
+        throw runtime_error("assignArr (int[], index): Index out of range");
     }
-    if (arr.data_type != INT && arr.data_type != MEDIUM_INT) {
-        throw runtime_error("assignArr (index, int): Type mismatch. Data type of variable is " + getDataTypeStr(arr.data_type));
-    } else {
-        LOCK(&mem->mutex);
-        u_int idx = counterToIdx(arr.ind);
-        int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
-        WORD_ALIGN("Data type = %s, reading 1 word from memory", getDataTypeStr(arr.data_type).c_str());
-        if (arr.data_type == INT) {
-            memcpy(p + index, &val, 4);
-        } else if (arr.data_type == MEDIUM_INT) {
-            if (val < MEDIUM_INT_MIN || val > MEDIUM_INT_MAX) {
-                WARNING("assignArr (index, int): Variable at index %d is of type medium int, value is out of range, compressing", index);
-            }
-            memcpy(p + index, &val, 4);
-        }
-        UNLOCK(&mem->mutex);
+    LOCK(&mem->mutex);
+    u_int idx = counterToIdx(arr.ind);
+    int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
+    WORD_ALIGN("Data type = %s, reading 1 word from memory", getDataTypeStr(arr.data_type).c_str());
+    memcpy(p + index, &val, 4);
+    UNLOCK(&mem->mutex);
+}
+
+void assignArr(MyType &arr, int index, medium_int val) {
+    LIBRARY("assignArr (medium int[], index) called for array with counter = %d at index = %d and value = %d", arr.ind, index, val.medIntToInt());
+    validate(arr, ARRAY, MEDIUM_INT, true);
+    if (index < 0 || index >= (int)arr.len) {
+        throw runtime_error("assignArr (medium int[], index): Index out of range");
     }
+    LOCK(&mem->mutex);
+    u_int idx = counterToIdx(arr.ind);
+    int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
+    WORD_ALIGN("Data type = %s, reading 1 word from memory", getDataTypeStr(arr.data_type).c_str());
+    int temp = val.medIntToInt();
+    memcpy(p + index, &temp, 4);
+    UNLOCK(&mem->mutex);
 }
 
 void assignArr(MyType &arr, int index, char val) {
-    LIBRARY("assignArr (char) called for array with counter = %d at index = %d and value = %c", arr.ind, index, val);
-    validate(arr, ARRAY);
+    LIBRARY("assignArr (char[], index) called for array with counter = %d at index = %d and value = %c", arr.ind, index, val);
+    validate(arr, ARRAY, CHAR, true);
     if (index < 0 || index >= (int)arr.len) {
-        throw runtime_error("assignArr (index, char): Index out of range");
+        throw runtime_error("assignArr (char[], index): Index out of range");
     }
-    if (arr.data_type != CHAR) {
-        throw runtime_error("assignArr (index, char): Type mismatch. Data type of variable is " + getDataTypeStr(arr.data_type));
-    } else {
-        LOCK(&mem->mutex);
-        u_int idx = counterToIdx(arr.ind);
-        int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
-        int *q = p + getWordForIdx(arr.data_type, index);
-        int offset = getOffsetForIdx(arr.data_type, index);
-        WORD_ALIGN("Data type = char, reading entire 1 word memory");
-        int temp = *q;
-        WORD_ALIGN("Changing byte no. %d in the word", offset);
-        temp = temp & ~(0xff << (offset * 8));
-        temp = temp | (val << (offset * 8));
-        WORD_ALIGN("Writing the word back to memory");
-        memcpy(q, &temp, 4);
-        UNLOCK(&mem->mutex);
-    }
+    LOCK(&mem->mutex);
+    u_int idx = counterToIdx(arr.ind);
+    int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
+    int *q = p + getWordForIdx(arr.data_type, index);
+    int offset = getOffsetForIdx(arr.data_type, index);
+    WORD_ALIGN("Data type = char, reading entire 1 word memory");
+    int temp = *q;
+    WORD_ALIGN("Changing byte no. %d in the word", offset);
+    temp = temp & ~(0xff << (offset * 8));
+    temp = temp | (val << (offset * 8));
+    WORD_ALIGN("Writing the word back to memory");
+    memcpy(q, &temp, 4);
+    UNLOCK(&mem->mutex);
 }
 
 void assignArr(MyType &arr, int index, bool val) {
-    LIBRARY("assignArr (bool) called for array with counter = %d at index = %d and value = %d", arr.ind, index, val);
-    validate(arr, ARRAY);
+    LIBRARY("assignArr (bool[], index) called for array with counter = %d at index = %d and value = %d", arr.ind, index, val);
+    validate(arr, ARRAY, BOOLEAN, true);
     if (index < 0 || index >= (int)arr.len) {
-        throw runtime_error("assignArr (index, bool): Index out of range");
+        throw runtime_error("assignArr (bool[], index): Index out of range");
     }
-    if (arr.data_type != BOOLEAN) {
-        throw runtime_error("assignArr (index, bool): Type mismatch. Data type of variable is " + getDataTypeStr(arr.data_type));
-    } else {
-        LOCK(&mem->mutex);
-        u_int idx = counterToIdx(arr.ind);
-        int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
-        int *q = p + getWordForIdx(arr.data_type, index);
-        int offset = getOffsetForIdx(arr.data_type, index);
-        WORD_ALIGN("Data type = char, reading entire 1 word memory");
-        int temp = *q;
-        WORD_ALIGN("Changing bit no. %d in the word", offset);
-        temp = temp & ~(1 << offset);
-        temp = temp | (val << offset);
-        WORD_ALIGN("Writing the word back to memory");
-        memcpy(q, &temp, 4);
-        UNLOCK(&mem->mutex);
-    }
+    LOCK(&mem->mutex);
+    u_int idx = counterToIdx(arr.ind);
+    int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
+    int *q = p + getWordForIdx(arr.data_type, index);
+    int offset = getOffsetForIdx(arr.data_type, index);
+    WORD_ALIGN("Data type = char, reading entire 1 word memory");
+    int temp = *q;
+    WORD_ALIGN("Changing bit no. %d in the word", offset);
+    temp = temp & ~(1 << offset);
+    temp = temp | (val << offset);
+    WORD_ALIGN("Writing the word back to memory");
+    memcpy(q, &temp, 4);
+    UNLOCK(&mem->mutex);
 }
 
 void readArr(MyType &arr, void *ptr) {
     LIBRARY("readArr called for array with counter = %d", arr.ind);
-    validate(arr, ARRAY);
+    if (arr.var_type != ARRAY) {
+        throw runtime_error("readArr: Variable is not a array");
+    }
+    if (!page_table->pt[counterToIdx(arr.ind)].valid) {
+        throw runtime_error("readArr: Variable is not valid");
+    }
     int size = getSize(arr.data_type);
     LOCK(&mem->mutex);
     u_int idx = counterToIdx(arr.ind);
@@ -836,10 +831,8 @@ void readArr(MyType &arr, void *ptr) {
         WORD_ALIGN("Data type = medium int, copying 1 word chunks from memory to the destination address");
         for (size_t i = 0; i < arr.len; i++) {
             int temp = *(p + i);
-            if (temp & (1 << 23)) {
-                temp = temp | 0xff000000;
-            }
-            memcpy((int *)ptr + i, &temp, size);
+            medium_int t(temp);
+            memcpy((medium_int *)ptr + i, &t, size);
         }
     } else if (arr.data_type == CHAR) {
         WORD_ALIGN("Data type = char, copying 1 word chunks (= 4 array elements) from memory to the destination address");
@@ -869,8 +862,13 @@ void readArr(MyType &arr, void *ptr) {
 }
 
 void readArr(MyType &arr, int index, void *ptr) {
-    LIBRARY("readArr called for array with counter = %d at index = %d", arr.ind, index);
-    validate(arr, ARRAY);
+    LIBRARY("readArr (index) called for array with counter = %d at index = %d", arr.ind, index);
+    if (arr.var_type != ARRAY) {
+        throw runtime_error("readArr (index): Variable is not a array");
+    }
+    if (!page_table->pt[counterToIdx(arr.ind)].valid) {
+        throw runtime_error("readArr (index): Variable is not valid");
+    }
     if (index < 0 || index >= (int)arr.len) {
         throw runtime_error("readArr (index): Index out of range");
     }
@@ -883,13 +881,9 @@ void readArr(MyType &arr, int index, void *ptr) {
     int t = *q;
     WORD_ALIGN("Read 1 word from memory");
     if (arr.data_type == MEDIUM_INT) {
-        if (t & (1 << 23)) {
-            t = t | 0xff000000;
-        }
-        WORD_ALIGN("Appropriate sign bit padded for medium int");
-    }
-    if (arr.data_type == MEDIUM_INT) {
-        size++;
+        medium_int temp(t);
+        memcpy(ptr, &temp, size);
+        WORD_ALIGN("Data type = %s, 3 bytes copied to destination address", getDataTypeStr(arr.data_type).c_str());
     }
     if (arr.data_type == BOOLEAN) {
         t = (t >> offset) & 1;
@@ -1034,178 +1028,188 @@ void testCompactionCall() {
     }
 }
 
-int main() {
-    createMem(120);
+// int main() {
+//     createMem(120);
 
-    // testCode();
-    // testCompactionCall();
+//     // testCode();
+//     // testCompactionCall();
 
-    // MyType aa = createVar(INT);
-    // aa.print();
-    // assignVar(aa, -19);
-    // int x;
-    // readVar(aa, &x);
-    // DEBUG("value of aa = %d", x);
+//     // MyType aa = createVar(INT);
+//     // aa.print();
+//     // assignVar(aa, -19);
+//     // int x;
+//     // readVar(aa, &x);
+//     // DEBUG("value of aa = %d", x);
 
-    // int *p = mem->start;
-    // printf("%d, %d\n", *p >> 1, *p & 1);
-    // printf("%d, %d\n", *(p + 2) >> 1, *(p + 2) & 1);
-    // printf("%d, %d\n", *(p + 3) >> 1, *(p + 3) & 1);
+//     // int *p = mem->start;
+//     // printf("%d, %d\n", *p >> 1, *p & 1);
+//     // printf("%d, %d\n", *(p + 2) >> 1, *(p + 2) & 1);
+//     // printf("%d, %d\n", *(p + 3) >> 1, *(p + 3) & 1);
 
-    // MyType a = createVar(CHAR);
-    // a.print();
-    // page_table->pt[counterToIdx(a.ind)].print();
-    // assignVar(a, 'b');
-    // char v;
-    // readVar(a, &v);
-    // DEBUG("value of a = %c", v);
+//     // MyType a = createVar(CHAR);
+//     // a.print();
+//     // assignVar(a, 'b');
+//     // char v;
+//     // readVar(a, &v);
+//     // DEBUG("value of a = %c", v);
 
-    // MyType b = createVar(BOOLEAN);
-    // b.print();
-    // page_table->pt[counterToIdx(b.ind)].print();
-    // assignVar(b, false);
-    // bool xx;
-    // readVar(b, &xx);
-    // // cout << xx << endl;
-    // DEBUG("value of b = %d", xx);
+//     // MyType b = createVar(BOOLEAN);
+//     // b.print();
+//     // assignVar(b, true);
+//     // bool xx;
+//     // readVar(b, &xx);
+//     // // cout << xx << endl;
+//     // DEBUG("value of b = %d", xx);
 
-    MyType bb = createVar(MEDIUM_INT);
-    bb.print();
-    assignVar(bb, INT32_MIN);
-    int y;
-    readVar(bb, &y);
-    DEBUG("value of bb = %d", y);
+//     // MyType bb = createVar(MEDIUM_INT);
+//     // bb.print();
+//     // medium_int t(INT32_MIN);
+//     // assignVar(bb, t);
+//     // medium_int y;
+//     // readVar(bb, &y);
+//     // DEBUG("value of bb = %d", y.medIntToInt());
 
-    // MyType arr1 = createArr(INT, 5);
-    // arr1.print();
-    // int arr1_val[] = {1, 2, -3, 4, -5};
-    // assignArr(arr1, arr1_val);
-    // int arr1_val_read[5];
-    // readArr(arr1, arr1_val_read);
-    // for (size_t i = 0; i < 5; i++) {
-    //     DEBUG("arr_val_read[%zu] = %d", i, arr1_val_read[i]);
-    // }
-    // assignArr(arr1, 0, -6);
-    // assignArr(arr1, 1, -7);
-    // assignArr(arr1, 2, -8);
-    // assignArr(arr1, 3, -9);
-    // assignArr(arr1, 4, 25);
-    // readArr(arr1, arr1_val_read);
-    // for (size_t i = 0; i < 5; i++) {
-    //     DEBUG("arr_val_read[%zu] = %d", i, arr1_val_read[i]);
-    // }
-    // int v;
-    // readArr(arr1, 0, &v);
-    // DEBUG("%d", v);
-    // readArr(arr1, 1, &v);
-    // DEBUG("%d", v);
-    // readArr(arr1, 2, &v);
-    // DEBUG("%d", v);
-    // readArr(arr1, 3, &v);
-    // DEBUG("%d", v);
-    // readArr(arr1, 4, &v);
-    // DEBUG("%d", v);
+//     // MyType arr1 = createArr(INT, 5);
+//     // arr1.print();
+//     // int arr1_val[] = {1, 2, -3, 4, -5};
+//     // assignArr(arr1, arr1_val);
+//     // int arr1_val_read[5];
+//     // readArr(arr1, arr1_val_read);
+//     // for (size_t i = 0; i < 5; i++) {
+//     //     DEBUG("arr_val_read[%zu] = %d", i, arr1_val_read[i]);
+//     // }
+//     // assignArr(arr1, 0, -6);
+//     // assignArr(arr1, 1, -7);
+//     // assignArr(arr1, 2, -8);
+//     // assignArr(arr1, 3, -9);
+//     // assignArr(arr1, 4, 25);
+//     // readArr(arr1, arr1_val_read);
+//     // for (size_t i = 0; i < 5; i++) {
+//     //     DEBUG("arr_val_read[%zu] = %d", i, arr1_val_read[i]);
+//     // }
+//     // int v;
+//     // readArr(arr1, 0, &v);
+//     // DEBUG("%d", v);
+//     // readArr(arr1, 1, &v);
+//     // DEBUG("%d", v);
+//     // readArr(arr1, 2, &v);
+//     // DEBUG("%d", v);
+//     // readArr(arr1, 3, &v);
+//     // DEBUG("%d", v);
+//     // readArr(arr1, 4, &v);
+//     // DEBUG("%d", v);
 
-    // MyType arr = createArr(MEDIUM_INT, 5);
-    // arr.print();
-    // int arr_val[] = {1, 2, -3, 4, -5};
-    // assignArr(arr, arr_val);
-    // int arr_val_read[5];
-    // readArr(arr, arr_val_read);
-    // for (size_t i = 0; i < 5; i++) {
-    //     DEBUG("arr_val_read[%zu] = %d", i, arr_val_read[i]);
-    // }
-    // printf("\n");
-    // assignArr(arr, 0, -6);
-    // assignArr(arr, 1, 7);
-    // assignArr(arr, 2, -8);
-    // assignArr(arr, 3, 9);
-    // assignArr(arr, 4, 25);
-    // readArr(arr, arr_val_read);
-    // for (size_t i = 0; i < 5; i++) {
-    //     DEBUG("arr_val_read[%zu] = %d", i, arr_val_read[i]);
-    // }
-    // int v;
-    // readArr(arr, 0, &v);
-    // DEBUG("%d", v);
-    // readArr(arr, 1, &v);
-    // DEBUG("%d", v);
-    // readArr(arr, 2, &v);
-    // DEBUG("%d", v);
-    // readArr(arr, 3, &v);
-    // DEBUG("%d", v);
-    // readArr(arr, 4, &v);
-    // DEBUG("%d", v);
+//     // MyType arr = createArr(MEDIUM_INT, 5);
+//     // arr.print();
+//     // medium_int arr_val[] = {medium_int(1), medium_int(2), medium_int(-3), medium_int(4), medium_int(-5)};
+//     // assignArr(arr, arr_val);
+//     // medium_int arr_val_read[5];
+//     // readArr(arr, arr_val_read);
+//     // for (size_t i = 0; i < 5; i++) {
+//     //     DEBUG("arr_val_read[%zu] = %d", i, arr_val_read[i].medIntToInt());
+//     // }
+//     // printf("\n");
+//     // assignArr(arr, 0, medium_int(-6));
+//     // assignArr(arr, 1, medium_int(7));
+//     // assignArr(arr, 2, medium_int(-8));
+//     // assignArr(arr, 3, medium_int(9));
+//     // assignArr(arr, 4, medium_int(25));
+//     // readArr(arr, arr_val_read);
+//     // for (size_t i = 0; i < 5; i++) {
+//     //     DEBUG("arr_val_read[%zu] = %d", i, arr_val_read[i].medIntToInt());
+//     // }
+//     // medium_int v;
+//     // readArr(arr, 0, &v);
+//     // DEBUG("%d", v.medIntToInt());
+//     // readArr(arr, 1, &v);
+//     // DEBUG("%d", v.medIntToInt());
+//     // readArr(arr, 2, &v);
+//     // DEBUG("%d", v.medIntToInt());
+//     // readArr(arr, 3, &v);
+//     // DEBUG("%d", v.medIntToInt());
+//     // readArr(arr, 4, &v);
+//     // DEBUG("%d", v.medIntToInt());
 
-    // MyType arr2 = createArr(INT, 5);
-    // arr2.print();
-    // int arr2_val[] = {1, 2, -3, 4, -5};
-    // assignArr(arr2, arr2_val);
-    // int arr2_val_read[5];
-    // readArr(arr2, arr2_val_read);
-    // for (size_t i = 0; i < 5; i++) {
-    //     DEBUG("arr_val_read[%zu] = %d", i, arr2_val_read[i]);
-    // }
-    //     assignArr(arr2, 0, -6);
-    //     assignArr(arr2, 1, -7);
-    //     assignArr(arr2, 2, -8);
-    //     assignArr(arr2, 3, -9);
-    //     assignArr(arr2, 4, 25);
-    //     readArr(arr2, arr2_val_read);
-    //     // for (size_t i = 0; i < 5; i++) {
-    //     //     DEBUG("arr_val_read[%zu] = %d", i, arr2_val_read[i]);
-    //     // }
+//     // MyType arr2 = createArr(INT, 5);
+//     // arr2.print();
+//     // int arr2_val[] = {1, 2, -3, 4, -5};
+//     // assignArr(arr2, arr2_val);
+//     // int arr2_val_read[5];
+//     // readArr(arr2, arr2_val_read);
+//     // for (size_t i = 0; i < 5; i++) {
+//     //     DEBUG("arr_val_read[%zu] = %d", i, arr2_val_read[i]);
+//     // }
+//     //     assignArr(arr2, 0, -6);
+//     //     assignArr(arr2, 1, -7);
+//     //     assignArr(arr2, 2, -8);
+//     //     assignArr(arr2, 3, -9);
+//     //     assignArr(arr2, 4, 25);
+//     //     readArr(arr2, arr2_val_read);
+//     //     // for (size_t i = 0; i < 5; i++) {
+//     //     //     DEBUG("arr_val_read[%zu] = %d", i, arr2_val_read[i]);
+//     //     // }
 
-    //     freeElem(arr);
+//     //     freeElem(arr);
 
-    // MyType arr3 = createArr(CHAR, 10);
-    // char arr3_val[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'};
-    // assignArr(arr3, arr3_val);
-    // char arr3_val_read[10];
-    // readArr(arr3, arr3_val_read);
-    // for (size_t i = 0; i < 10; i++) {
-    //     DEBUG("arr3_val_read[%zu] = %c", i, arr3_val_read[i]);
-    // }
-    // printf("\n");
-    // assignArr(arr3, 0, 'f');
-    // assignArr(arr3, 1, 'g');
-    // assignArr(arr3, 2, 'h');
-    // assignArr(arr3, 3, 'i');
-    // assignArr(arr3, 4, 'j');
-    // // readArr(arr3, arr3_val_read);
-    // for (size_t i = 0; i < 5; i++) {
-    //     char cc;
-    //     readArr(arr3, i, &cc);
-    //     DEBUG("arr3_val_read[%zu] = %c", i, cc);
-    // }
+//     // MyType arr3 = createArr(CHAR, 10);
+//     // char arr3_val[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'};
+//     // assignArr(arr3, arr3_val);
+//     // char arr3_val_read[10];
+//     // readArr(arr3, arr3_val_read);
+//     // for (size_t i = 0; i < 10; i++) {
+//     //     DEBUG("arr3_val_read[%zu] = %c", i, arr3_val_read[i]);
+//     // }
+//     // printf("\n");
+//     // assignArr(arr3, 0, 'f');
+//     // assignArr(arr3, 1, 'g');
+//     // assignArr(arr3, 2, 'h');
+//     // assignArr(arr3, 3, 'i');
+//     // assignArr(arr3, 4, 'j');
+//     // // readArr(arr3, arr3_val_read);
+//     // for (size_t i = 0; i < 5; i++) {
+//     //     char cc;
+//     //     readArr(arr3, i, &cc);
+//     //     DEBUG("arr3_val_read[%zu] = %c", i, cc);
+//     // }
+//     // char v;
+//     // readArr(arr3, 0, &v);
+//     // DEBUG("%c", v);
+//     // readArr(arr3, 1, &v);
+//     // DEBUG("%c", v);
+//     // readArr(arr3, 2, &v);
+//     // DEBUG("%c", v);
+//     // readArr(arr3, 3, &v);
+//     // DEBUG("%c", v);
+//     // readArr(arr3, 4, &v);
+//     // DEBUG("%c", v);
 
-    // MyType arr = createArr(BOOLEAN, 40);
-    // arr.print();
-    // bool arr_val[40];
-    // for (size_t i = 0; i < 40; i++) {
-    //     arr_val[i] = i % 2;
-    // }
-    // assignArr(arr, arr_val);
-    // bool arr_val_read[40];
-    // readArr(arr, arr_val_read);
-    // for (size_t i = 0; i < 40; i++) {
-    //     DEBUG("arr_val_read[%zu] = %d", i, arr_val_read[i]);
-    // }
-    // printf("\n");
-    // for (size_t i = 0; i < 40; i++) {
-    //     assignArr(arr, i, !arr_val[i]);
-    // }
-    // assignArr(arr, 0, false);
-    // assignArr(arr, 1, true);
-    // assignArr(arr, 2, false);
-    // assignArr(arr, 3, true);
-    // assignArr(arr, 35, false);
-    // readArr(arr, arr_val_read);
-    // for (size_t i = 0; i < 40; i++) {
-    //     bool bb;
-    //     readArr(arr, i, &bb);
-    //     DEBUG("arr_val_read[%zu] = %d", i, bb);
-    // }
+//     // MyType arr = createArr(BOOLEAN, 40);
+//     // arr.print();
+//     // bool arr_val[40];
+//     // for (size_t i = 0; i < 40; i++) {
+//     //     arr_val[i] = i % 2;
+//     // }
+//     // assignArr(arr, arr_val);
+//     // bool arr_val_read[40];
+//     // readArr(arr, arr_val_read);
+//     // for (size_t i = 0; i < 40; i++) {
+//     //     DEBUG("arr_val_read[%zu] = %d", i, arr_val_read[i]);
+//     // }
+//     // printf("\n");
+//     // // for (size_t i = 0; i < 40; i++) {
+//     // //     assignArr(arr, i, !arr_val[i]);
+//     // // }
+//     // assignArr(arr, 0, false);
+//     // assignArr(arr, 1, false);
+//     // assignArr(arr, 2, false);
+//     // assignArr(arr, 3, false);
+//     // assignArr(arr, 35, false);
+//     // readArr(arr, arr_val_read);
+//     // for (size_t i = 0; i < 40; i++) {
+//     //     bool bb;
+//     //     readArr(arr, i, &bb);
+//     //     DEBUG("arr_val_read[%zu] = %d", i, bb);
+//     // }
 
-    cleanExit();
-}
+//     cleanExit();
+// }
