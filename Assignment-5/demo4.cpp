@@ -3,7 +3,7 @@
 using namespace std;
 
 int main() {
-    createMem(400, true);
+    createMem(400, false);
     initScope();
     MyType v1 = createVar(INT);
     MyType arr1 = createArr(INT, 10);
@@ -28,7 +28,7 @@ int main() {
     freeElem(v5);
     freeElem(arr6);
     freeElem(arr7);
-    usleep(20);
+    MyType l = createArr(INT, 40);
     endScope();
     cleanExit();
 }

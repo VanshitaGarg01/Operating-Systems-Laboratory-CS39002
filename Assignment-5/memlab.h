@@ -8,7 +8,7 @@
 
 using namespace std;
 
-#define WARNING(msg, ...) printf("\x1b[31m[WARNING] " msg "\x1b[0m\n", ##__VA_ARGS__);
+#define WARNING(msg, ...) printf("\x1b[35m[WARNING] " msg "\x1b[0m\n", ##__VA_ARGS__);
 
 const int MEDIUM_INT_MAX = (1 << 23) - 1;
 const int MEDIUM_INT_MIN = -(1 << 23);
@@ -108,19 +108,22 @@ struct MyType {
     }
 };
 
-void createMem(size_t bytes);
+void createMem(size_t bytes, bool is_gc_Active = true, bool is_profiler_active = false, string file = "memory_footprint.txt");
 
 MyType createVar(DataType type);
 void assignVar(MyType &var, int val);
+void assignVar(MyType &var, medium_int val);
 void assignVar(MyType &var, char val);
 void assignVar(MyType &var, bool val);
 void readVar(MyType &var, void *ptr);
 
 MyType createArr(DataType type, int len);
 void assignArr(MyType &arr, int val[]);
+void assignArr(MyType &arr, medium_int val[]);
 void assignArr(MyType &arr, char val[]);
 void assignArr(MyType &arr, bool val[]);
 void assignArr(MyType &arr, int index, int val);
+void assignArr(MyType &arr, int index, medium_int val);
 void assignArr(MyType &arr, int index, char val);
 void assignArr(MyType &arr, int index, bool val);
 void readArr(MyType &arr, void *ptr);
@@ -131,6 +134,8 @@ void gcActivate();
 
 void initScope();
 void endScope();
+
+void displayMem();
 
 void cleanExit();
 

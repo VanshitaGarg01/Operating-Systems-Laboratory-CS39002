@@ -11,7 +11,7 @@ void func1(MyType x, MyType y) {  // INT
         int sign = i % 2 == 0 ? 1 : -1;
         assignArr(arr, i, sign * rand());
     }
-    freeElem(arr);
+    // freeElem(arr);
     endScope();
     gcActivate();
 }
@@ -21,9 +21,9 @@ void func2(MyType x, MyType y) {  // MEDIUM INT
     MyType arr = createArr(x.data_type, ARR_SIZE);
     for (int i = 0; i < ARR_SIZE; i++) {
         int sign = i % 2 == 0 ? 1 : -1;
-        assignArr(arr, i, sign * (rand() % (1 << 23)));
+        assignArr(arr, i, medium_int(sign * (rand() % (1 << 23))));
     }
-    freeElem(arr);
+    // freeElem(arr);
     endScope();
     gcActivate();
 }
@@ -32,9 +32,9 @@ void func3(MyType x, MyType y) {  // CHAR
     initScope();
     MyType arr = createArr(x.data_type, ARR_SIZE);
     for (int i = 0; i < ARR_SIZE; i++) {
-        assignArr(arr, i, (char)(rand() % 256));
+        assignArr(arr, i, (char)('a' + (rand() % 26)));
     }
-    freeElem(arr);
+    // freeElem(arr);
     endScope();
     gcActivate();
 }
@@ -45,7 +45,7 @@ void func4(MyType x, MyType y) {  // BOOL
     for (int i = 0; i < ARR_SIZE; i++) {
         assignArr(arr, i, (bool)(rand() % 2));
     }
-    freeElem(arr);
+    // freeElem(arr);
     endScope();
     gcActivate();
 }
@@ -57,7 +57,7 @@ void func5(MyType x, MyType y) {  // INT
         int sign = i % 2 == 0 ? 1 : -1;
         assignArr(arr, i, sign * rand());
     }
-    freeElem(arr);
+    // freeElem(arr);
     endScope();
     gcActivate();
 }
@@ -67,9 +67,9 @@ void func6(MyType x, MyType y) {  // MEDIUM INT
     MyType arr = createArr(x.data_type, ARR_SIZE);
     for (int i = 0; i < ARR_SIZE; i++) {
         int sign = i % 2 == 0 ? 1 : -1;
-        assignArr(arr, i, sign * (rand() % (1 << 23)));
+        assignArr(arr, i, medium_int(sign * (rand() % (1 << 23))));
     }
-    freeElem(arr);
+    // freeElem(arr);
     endScope();
     gcActivate();
 }
@@ -78,9 +78,9 @@ void func7(MyType x, MyType y) {  // CHAR
     initScope();
     MyType arr = createArr(x.data_type, ARR_SIZE);
     for (int i = 0; i < ARR_SIZE; i++) {
-        assignArr(arr, i, (char)(rand() % 256));
+        assignArr(arr, i, (char)('a' + (rand() % 26)));
     }
-    freeElem(arr);
+    // freeElem(arr);
     endScope();
     gcActivate();
 }
@@ -91,7 +91,7 @@ void func8(MyType x, MyType y) {  // BOOL
     for (int i = 0; i < ARR_SIZE; i++) {
         assignArr(arr, i, (bool)(rand() % 2));
     }
-    freeElem(arr);
+    // freeElem(arr);
     endScope();
     gcActivate();
 }
@@ -103,7 +103,7 @@ void func9(MyType x, MyType y) {  // INT
         int sign = i % 2 == 0 ? 1 : -1;
         assignArr(arr, i, sign * rand());
     }
-    freeElem(arr);
+    // freeElem(arr);
     endScope();
     gcActivate();
 }
@@ -112,25 +112,25 @@ void func10(MyType x, MyType y) {  // CHAR
     initScope();
     MyType arr = createArr(x.data_type, ARR_SIZE);
     for (int i = 0; i < ARR_SIZE; i++) {
-        assignArr(arr, i, (char)(rand() % 256));
+        assignArr(arr, i, (char)('a' + (rand() % 26)));
     }
-    freeElem(arr);
+    // freeElem(arr);
     endScope();
     gcActivate();
 }
 
 int main() {
     srand(time(NULL));
-    createMem(250 * 1024 * 1024);
+    createMem(250 * 1024 * 1024, true);
     initScope();
     MyType x1 = createVar(INT);
     assignVar(x1, 16);
     MyType y1 = createVar(INT);
     assignVar(y1, -39);
     MyType x2 = createVar(MEDIUM_INT);
-    assignVar(x2, 22);
+    assignVar(x2, medium_int(22));
     MyType y2 = createVar(MEDIUM_INT);
-    assignVar(y2, -95);
+    assignVar(y2, medium_int(-95));
     MyType x3 = createVar(CHAR);
     assignVar(x3, 'a');
     MyType y3 = createVar(CHAR);

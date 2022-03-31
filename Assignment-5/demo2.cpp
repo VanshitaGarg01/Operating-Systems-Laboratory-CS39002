@@ -1,5 +1,3 @@
-#include <iostream>
-
 #include "memlab.h"
 
 using namespace std;
@@ -43,15 +41,18 @@ int fibonacciProduct(MyType k) {
 }
 
 int main(int argc, char* argv[]) {
-    createMem(500 * 1024 * 1024);
+    createMem(500 * 1024 * 1024, true);
     initScope();
     MyType k = createVar(INT);
-    assignVar(k, atoi(argv[1]));
+    if (argc < 2) {
+        assignVar(k, 5);
+    } else {
+        assignVar(k, atoi(argv[1]));
+    }
     int k_val;
     readVar(k, &k_val);
     long long prod = fibonacciProduct(k);
     printf("The product of the first %d fibonacci numbers is %lld\n", k_val, prod);
-    fflush(stdout);
     endScope();
     gcActivate();
     cleanExit();

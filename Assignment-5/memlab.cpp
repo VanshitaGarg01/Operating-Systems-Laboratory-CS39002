@@ -8,15 +8,15 @@
 
 using namespace std;
 
-#ifndef NOLOGS
+#ifdef LOGS
 #define DEBUG(msg, ...) printf("\x1b[32m[DEBUG] " msg " \x1b[0m\n", ##__VA_ARGS__);
 #define ERROR(msg, ...) printf("\x1b[31m[ERROR] " msg " \x1b[0m\n", ##__VA_ARGS__);
-#define LIBRARY(msg, ...) printf("\x1b[32m[LIBRARY] " msg " \x1b[0m\n", ##__VA_ARGS__);
-#define PAGE_TABLE(msg, ...) printf("\x1b[33m[PAGE TABLE] " msg " \x1b[0m\n", ##__VA_ARGS__);
-#define WORD_ALIGN(msg, ...) printf("\x1b[34m[WORD ALIGNMENT] " msg " \x1b[0m\n", ##__VA_ARGS__);
-#define GC(msg, ...) printf("\x1b[36m[GC] " msg "\x1b[0m\n", ##__VA_ARGS__);
+#define LIBRARY(msg, ...) printf("\x1b[34m[LIBRARY] " msg " \x1b[0m\n", ##__VA_ARGS__);
+#define PAGE_TABLE(msg, ...) printf("\x1b[37m[PAGE TABLE] " msg " \x1b[0m\n", ##__VA_ARGS__);
+#define WORD_ALIGN(msg, ...) printf("\x1b[36m[WORD ALIGNMENT] " msg " \x1b[0m\n", ##__VA_ARGS__);
+#define GC(msg, ...) printf("\x1b[33m[GC] " msg "\x1b[0m\n", ##__VA_ARGS__);
 #define STACK(msg, ...) printf("\x1b[37m[STACK] " msg "\x1b[0m\n", ##__VA_ARGS__);
-#define MEMORY(msg, ...) printf("\x1b[35m[MEMORY] " msg "\x1b[0m\n", ##__VA_ARGS__);
+#define MEMORY(msg, ...) printf("\x1b[37m[MEMORY] " msg "\x1b[0m\n", ##__VA_ARGS__);
 #else
 #define DEBUG(msg, ...)
 #define ERROR(msg, ...)
@@ -34,8 +34,13 @@ typedef long unsigned int u_long;
 const size_t MAX_PT_ENTRIES = 1024;
 const size_t MAX_STACK_SIZE = 1024;
 
-const int GC_SLEEP_MS = 50;
-const double COMPACTION_RATIO_THRESHOLD = 2;
+const double EXTRA_MEM_FACTOR = 1.25;
+const int GC_SLEEP_US = 10;
+const double COMPACTION_RATIO_THRESHOLD = 3.0;
+
+bool gc_active;
+bool profiler_active;
+FILE *fp;
 
 #define LOCK(mutex_p)                                                            \
     do {                                                                         \
@@ -55,6 +60,7 @@ const double COMPACTION_RATIO_THRESHOLD = 2;
         }                                                                          \
     } while (0)
 
+// Reference: https://web2.qatar.cmu.edu/~msakr/15213-f09/lectures/class19.pdf
 struct Memory {
     int *start;
     int *end;
@@ -132,6 +138,9 @@ struct Memory {
             currMaxFree -= sz;
         }
         currMaxFree = max(currMaxFree, totalFree / (numFreeBlocks + 1));
+        if (profiler_active) {
+            fprintf(fp, "%ld\n", size - totalFree);
+        }
         MEMORY("Allocated block at %lu for %lu word(s) of data", (u_long)p, sz - 2);
     }
 
@@ -165,6 +174,22 @@ struct Memory {
 
         currMaxFree = max(currMaxFree, (size_t)curr_size);
         currMaxFree = max(currMaxFree, totalFree / (numFreeBlocks + 1));
+        if (profiler_active) {
+            fprintf(fp, "%ld\n", size - totalFree);
+        }
+    }
+
+    void displayMem() {
+// TODO: add memory color
+#ifdef LOGS
+        int *p = start;
+        printf("   Start      End    Allocated\n");
+        while (p < end) {
+            printf("%7ld %9ld %10d\n", p - start, (p - start - 1) + (*p >> 1), *p & 1);
+            p = p + (*p >> 1);
+        }
+        printf("Total free memory = %ld words, Largest free block = %ld words, No. of free blocks = %d\n", totalFree, currMaxFree, numFreeBlocks);
+#endif
     }
 };
 
@@ -324,23 +349,23 @@ void freeElem(u_int idx) {
 
 void freeElem(MyType &var) {
     LIBRARY("freeElem called for variable with counter = %d", var.ind);
-    LOCK(&page_table->mutex);
     LOCK(&mem->mutex);
+    LOCK(&page_table->mutex);
     if (page_table->pt[counterToIdx(var.ind)].valid) {
         freeElem(counterToIdx(var.ind));
     }
-    UNLOCK(&mem->mutex);
     UNLOCK(&page_table->mutex);
+    UNLOCK(&mem->mutex);
 }
 
 void calcNewOffsets() {
     int *p = mem->start;
-    int offset = 0;
+    u_int free = 0;
     while (p < mem->end) {
         if ((*p & 1) == 0) {
-            offset += (*p >> 1);
+            free += (*p >> 1);
         } else {
-            *(p + (*p >> 1) - 1) = (((p - offset) - mem->start) << 1) | 1;
+            *(p + (*p >> 1) - 1) = (((p - free) - mem->start) << 1) | 1;
         }
         p = p + (*p >> 1);
     }
@@ -360,12 +385,14 @@ void updatePageTable() {
 }
 
 void compactMemory() {
+    GC("Before compaction:");
+    mem->displayMem();
     GC("Starting memory compaction");
     calcNewOffsets();
     updatePageTable();
     int *p = mem->start;
     int *next = p + (*p >> 1);
-    while (next != mem->end) {
+    while (next < mem->end) {
         if ((*p & 1) == 0 && (*next & 1) == 1) {
             int curr_size = *p >> 1;
             int next_size = *next >> 1;
@@ -374,7 +401,7 @@ void compactMemory() {
             *p = curr_size << 1;
             *(p + curr_size - 1) = curr_size << 1;
             next = p + curr_size;
-            if (next != mem->end && (*next & 1) == 0) {
+            if (next < mem->end && (*next & 1) == 0) {
                 curr_size = curr_size + (*next >> 1);
                 *p = curr_size << 1;
                 *(p + curr_size - 1) = curr_size << 1;
@@ -395,6 +422,8 @@ void compactMemory() {
     mem->numFreeBlocks = 1;
     mem->currMaxFree = mem->totalFree;
     GC("Memory compaction completed");
+    GC("After compaction:");
+    mem->displayMem();
 }
 
 void gcRun() {
@@ -407,12 +436,10 @@ void gcRun() {
         }
     }
     double ratio = (double)mem->totalFree / (double)(mem->currMaxFree + 1);
-    GC("Ratio = %f", ratio);
+    GC("Ratio (Total Free / Largest Free) = %f", ratio);
     if (ratio >= COMPACTION_RATIO_THRESHOLD) {
         GC("Ratio more than compaction ratio threshold");
-        GC("Before compaction: Total free memory = %ld, Largest free block = %ld, No. of free blocks = %d", mem->totalFree, mem->currMaxFree, mem->numFreeBlocks);
         compactMemory();
-        GC("Before compaction: Total free memory = %ld, Largest free block = %ld, No. of free blocks = %d", mem->totalFree, mem->currMaxFree, mem->numFreeBlocks);
     }
     GC("gcRun finished");
     UNLOCK(&page_table->mutex);
@@ -421,7 +448,9 @@ void gcRun() {
 
 void gcActivate() {
     GC("gcActivate called");
-    pthread_kill(gc_tid, SIGUSR1);
+    if (gc_active) {
+        pthread_kill(gc_tid, SIGUSR1);
+    }
 }
 
 void handleSIGUSR1(int sig) {
@@ -439,9 +468,11 @@ void *gcThread(void *arg) {
     sigaddset(&mask, SIGUSR1);
     pthread_sigmask(SIG_UNBLOCK, &mask, NULL);
     while (1) {
-        usleep(GC_SLEEP_MS * 1000);  // adjust time
+        pthread_testcancel();
+        usleep(GC_SLEEP_US);
         pthread_sigmask(SIG_BLOCK, &mask, NULL);
         GC("Garbage collection thread awakened from sleep");
+        pthread_testcancel();
         gcRun();
         pthread_sigmask(SIG_UNBLOCK, &mask, NULL);
     }
@@ -449,32 +480,39 @@ void *gcThread(void *arg) {
 
 void initScope() {
     LIBRARY("initScope called");
-    if (var_stack->push(-1) < 0) {
-        throw runtime_error("initScope: Stack full, cannot push");
+    if (gc_active) {
+        if (var_stack->push(-1) < 0) {
+            throw runtime_error("initScope: Stack full, cannot push");
+        }
     }
 }
 
 void endScope() {
     LIBRARY("endScope called");
-    int ind;
-    do {
-        ind = var_stack->pop();
-        if (ind == -2) {
-            throw runtime_error("endScope: Stack empty, cannot pop");
-        }
-        if (ind >= 0) {
-            LOCK(&page_table->mutex);
-            page_table->pt[counterToIdx(ind)].marked = 0;
-            PAGE_TABLE("Unmarked entry in page table for variable with counter = %d", ind);
-            UNLOCK(&page_table->mutex);
-        }
-    } while (ind >= 0);
+    if (gc_active) {
+        int ind;
+        do {
+            ind = var_stack->pop();
+            if (ind == -2) {
+                throw runtime_error("endScope: Stack empty, cannot pop");
+            }
+            if (ind >= 0) {
+                LOCK(&page_table->mutex);
+                page_table->pt[counterToIdx(ind)].marked = 0;
+                PAGE_TABLE("Unmarked entry in page table for variable with counter = %d", ind);
+                UNLOCK(&page_table->mutex);
+            }
+        } while (ind >= 0);
+    }
 }
 
 void cleanExit() {
     LIBRARY("cleanExit called");
     LOCK(&mem->mutex);
     LOCK(&page_table->mutex);
+    if (gc_active) {
+        pthread_cancel(gc_tid);
+    }
     sem_destroy(&gc_sem);
     pthread_mutex_destroy(&mem->mutex);
     pthread_mutex_destroy(&page_table->mutex);
@@ -488,33 +526,35 @@ void cleanExit() {
     exit(0);
 }
 
-int getWordForIdx(DataType t, int idx) {
-    int _count;
-    if (t == BOOLEAN) {
-        _count = (1 << 5) / getSize(t);
+int idxToWord(DataType type, int idx) {
+    int cnt;
+    if (type == BOOLEAN) {
+        cnt = (1 << 5) / getSize(type);
     } else {
-        _count = (1 << 2) / getSize(t);
+        cnt = (1 << 2) / getSize(type);
     }
-    int _idx = idx / _count;
-    return _idx;
+    int word = idx / cnt;
+    return word;
 }
 
-int getOffsetForIdx(DataType t, int idx) {
-    int _count;
-    if (t == BOOLEAN) {
-        _count = (1 << 5) / getSize(t);
+int idxToOffset(DataType type, int idx) {
+    int cnt;
+    if (type == BOOLEAN) {
+        cnt = (1 << 5) / getSize(type);
     } else {
-        _count = (1 << 2) / getSize(t);
+        cnt = (1 << 2) / getSize(type);
     }
-    int _idx = idx / _count;
-    return (idx - _idx * _count) * getSize(t);
+    int word = idx / cnt;
+    return (idx - word * cnt) * getSize(type);
 }
 
-void createMem(size_t bytes) {
+void createMem(size_t bytes, bool is_gc_active, bool is_profiler_active, string file) {
     LIBRARY("createMem called");
     if (mem != NULL) {
         throw runtime_error("createMem: Memory already created");
     }
+    bytes = (size_t)(bytes * EXTRA_MEM_FACTOR);
+    bytes = ((bytes + 3) >> 2) << 2;
     mem = (Memory *)malloc(sizeof(Memory));
     if (mem->init(bytes) == -1) {
         throw runtime_error("createMem: Memory allocation failed");
@@ -526,9 +566,18 @@ void createMem(size_t bytes) {
     var_stack = (Stack *)malloc(sizeof(Stack));
     var_stack->init();
 
+    gc_active = is_gc_active;
+    profiler_active = is_profiler_active;
+
+    if (profiler_active) {
+        fp = fopen(file.c_str(), "w");
+    }
+
     sem_init(&gc_sem, 0, 0);
-    pthread_create(&gc_tid, NULL, gcThread, NULL);
-    sem_wait(&gc_sem);
+    if (gc_active) {
+        pthread_create(&gc_tid, NULL, gcThread, NULL);
+        sem_wait(&gc_sem);
+    }
 }
 
 MyType create(VarType var_type, DataType data_type, u_int len, u_int size_req) {
@@ -536,9 +585,10 @@ MyType create(VarType var_type, DataType data_type, u_int len, u_int size_req) {
     int *p = mem->findFreeBlock(size_req);
     if (p == NULL) {
         LOCK(&page_table->mutex);
+        MEMORY("Could not find free block, trying compaction");
         compactMemory();
-        p = mem->findFreeBlock(size_req);
         UNLOCK(&page_table->mutex);
+        p = mem->findFreeBlock(size_req);
         if (p == NULL) {
             throw runtime_error("create: No free block in memory");
         }
@@ -777,8 +827,8 @@ void assignArr(MyType &arr, int index, char val) {
     LOCK(&mem->mutex);
     u_int idx = counterToIdx(arr.ind);
     int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
-    int *q = p + getWordForIdx(arr.data_type, index);
-    int offset = getOffsetForIdx(arr.data_type, index);
+    int *q = p + idxToWord(arr.data_type, index);
+    int offset = idxToOffset(arr.data_type, index);
     WORD_ALIGN("Data type = char, reading entire 1 word memory");
     int temp = *q;
     WORD_ALIGN("Changing byte no. %d in the word", offset);
@@ -798,8 +848,8 @@ void assignArr(MyType &arr, int index, bool val) {
     LOCK(&mem->mutex);
     u_int idx = counterToIdx(arr.ind);
     int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
-    int *q = p + getWordForIdx(arr.data_type, index);
-    int offset = getOffsetForIdx(arr.data_type, index);
+    int *q = p + idxToWord(arr.data_type, index);
+    int offset = idxToOffset(arr.data_type, index);
     WORD_ALIGN("Data type = char, reading entire 1 word memory");
     int temp = *q;
     WORD_ALIGN("Changing bit no. %d in the word", offset);
@@ -876,8 +926,8 @@ void readArr(MyType &arr, int index, void *ptr) {
     LOCK(&mem->mutex);
     u_int idx = counterToIdx(arr.ind);
     int *p = mem->getAddr(page_table->pt[idx].addr) + 1;
-    int *q = p + getWordForIdx(arr.data_type, index);
-    int offset = getOffsetForIdx(arr.data_type, index);
+    int *q = p + idxToWord(arr.data_type, index);
+    int offset = idxToOffset(arr.data_type, index);
     int t = *q;
     WORD_ALIGN("Read 1 word from memory");
     if (arr.data_type == MEDIUM_INT) {
@@ -900,316 +950,9 @@ void readArr(MyType &arr, int index, void *ptr) {
     UNLOCK(&mem->mutex);
 }
 
-// void testCode() {
-//     createMem(1024 * 1024 * 512);  // 512 MB
-//     initScope();
-//     MyType p1 = createVar(INT);
-//     // cout << "p1.addr: " << p1.ind << endl;
-//     MyType p2 = createVar(BOOLEAN);
-//     MyType p3 = createVar(MEDIUM_INT);
-//     MyType p4 = createVar(CHAR);
-//     usleep(150 * 1000);
-//     freeElem(p1);
-//     freeElem(p3);
-//     MyType p5 = createVar(INT);
-//     // cout << "p5.addr: " << p5.ind << endl;
-//     endScope();
-//     initScope();
-//     usleep(100 * 1000);
-//     MyType q1 = createVar(INT);
-//     MyType q2 = createVar(BOOLEAN);
-//     MyType q3 = createVar(MEDIUM_INT);
-//     MyType q4 = createVar(CHAR);
-//     endScope();
-//     usleep(10000);
-//     cleanExit();
-// }
-
-// void testCompaction() {
-//     createMem(144);
-//     MyType p1 = createVar(INT);
-//     MyType p2 = createVar(INT);
-//     MyType arr1 = createArr(INT, 10);
-//     MyType p3 = createVar(INT);
-//     MyType p4 = createVar(INT);
-//     MyType arr2 = createArr(INT, 10);
-//     // usleep(1000);
-//     freeElem(p1);
-//     freeElem(p2);
-//     // freeElem(arr1);
-//     freeElem(p4);
-//     compactMemory();
-//     // int* arrptr1 = symTable->getPtr(arr1.addr >> 2);
-//     // cout << "arrptr1: " << arrptr1 - mem->start << endl;
-//     // int* ptr3 = symTable->getPtr(p3.addr >> 2);
-//     // cout << "ptr3:" << ptr3 - mem->start << endl;
-//     // int* arrptr2 = symTable->getPtr(arr2.addr >> 2);
-//     // cout << "arrptr2: " << arrptr2 - mem->start << endl;
-//     // cout << endl;
-//     int* p = mem->start;
-//     cout << (*(p) >> 1) << " " << (*(p)&1) << endl;
-//     cout << (*(p + 11) >> 1) << " " << (*(p + 11) & 1) << endl;
-//     cout << endl;
-//     cout << (*(p + 12) >> 1) << " " << (*(p + 12) & 1) << endl;
-//     cout << (*(p + 14) >> 1) << " " << (*(p + 14) & 1) << endl;
-//     cout << endl;
-//     cout << (*(p + 15) >> 1) << " " << (*(p + 15) & 1) << endl;
-//     cout << (*(p + 26) >> 1) << " " << (*(p + 26) & 1) << endl;
-//     cout << endl;
-//     cout << (*(p + 27) >> 1) << " " << (*(p + 27) & 1) << endl;
-//     p = mem->end - 1;
-//     cout << (*(p) >> 1) << " " << (*(p)&1) << endl;
-
-//     cleanExit();
-// }
-
-void testCompactionCall() {
-    createMem(144);
-    MyType p1 = createVar(INT);
-    assignVar(p1, 5);
-    MyType p2 = createVar(INT);
-    assignVar(p2, 10);
-    MyType arr1 = createArr(INT, 8);
-    int temp[] = {1, 2, 3, 4, 5, 6, 7, 8};
-    assignArr(arr1, temp);
-    MyType p3 = createVar(INT);
-    assignVar(p3, -15);
-    MyType p4 = createVar(INT);
-    assignVar(p4, -10);
-    MyType arr2 = createArr(INT, 6);
-    int temp1[] = {1, 2, 3, 4, 5, 6};
-    assignArr(arr2, temp1);
-    // freeElem(arr1);
-    freeElem(p1);
-    freeElem(p2);
-    freeElem(p3);
-    printf("Total free memory: %lu\n", mem->totalFree);
-    printf("Total free blocks: %d\n", mem->numFreeBlocks);
-    printf("Biggest free block: %lu\n", mem->currMaxFree);
-    MyType arr3 = createArr(INT, 6);
-    int temp2[] = {10, 20, 30, 40, 50, 60};
-    assignArr(arr3, temp2);
-    // usleep(60 * 1000);
-    // gcRun();
-    // compactMemory();
-    // int* ptr1 = symTable->getPtr(p1.addr >> 2);
-    // cout << "ptr1:" << ptr1 - mem->start << endl;
-    // int* ptr2 = symTable->getPtr(p2.addr >> 2);
-    // cout << "ptr2:" << ptr2 - mem->start << endl;
-    // int* ptr3 = symTable->getPtr(p3.addr >> 2);
-    // cout << "ptr3:" << ptr3 - mem->start << endl;
-    // int* ptr4 = symTable->getPtr(p4.addr >> 2);
-    // cout << "ptr4:" << ptr4 - mem->start << endl;
-    // int* arrptr2 = symTable->getPtr(arr2.addr >> 2);
-    // cout << "arrptr2: " << arrptr2 - mem->start << endl;
-    // int* arrptr3 = symTable->getPtr(arr3.addr >> 2);
-    // cout << "arrptr3: " << arrptr3 - mem->start << endl;
-    printf("Total free memory: %lu\n", mem->totalFree);
-    printf("Total free blocks: %d\n", mem->numFreeBlocks);
-    printf("Biggest free block: %lu\n", mem->currMaxFree);
-
-    int x;
-    // readVar(p1, &x);
-    // printf("p1: %d\n", x);
-    // readVar(p2, &x);
-    // printf("p2: %d\n", x);
-    // readVar(p3, &x);
-    // printf("p3: %d\n", x);
-    readVar(p4, &x);
-    printf("p4: %d\n", x);
-    int t[6];
-    readArr(arr2, t);
-    for (int i = 0; i < 6; i++) {
-        printf("arr2[%d]: %d\n", i, t[i]);
-    }
-    readArr(arr3, t);
-    for (int i = 0; i < 6; i++) {
-        printf("arr3[%d]: %d\n", i, t[i]);
-    }
-}
-
-// int main() {
-//     createMem(120);
-
-//     // testCode();
-//     // testCompactionCall();
-
-//     // MyType aa = createVar(INT);
-//     // aa.print();
-//     // assignVar(aa, -19);
-//     // int x;
-//     // readVar(aa, &x);
-//     // DEBUG("value of aa = %d", x);
-
-//     // int *p = mem->start;
-//     // printf("%d, %d\n", *p >> 1, *p & 1);
-//     // printf("%d, %d\n", *(p + 2) >> 1, *(p + 2) & 1);
-//     // printf("%d, %d\n", *(p + 3) >> 1, *(p + 3) & 1);
-
-//     // MyType a = createVar(CHAR);
-//     // a.print();
-//     // assignVar(a, 'b');
-//     // char v;
-//     // readVar(a, &v);
-//     // DEBUG("value of a = %c", v);
-
-//     // MyType b = createVar(BOOLEAN);
-//     // b.print();
-//     // assignVar(b, true);
-//     // bool xx;
-//     // readVar(b, &xx);
-//     // // cout << xx << endl;
-//     // DEBUG("value of b = %d", xx);
-
-//     // MyType bb = createVar(MEDIUM_INT);
-//     // bb.print();
-//     // medium_int t(INT32_MIN);
-//     // assignVar(bb, t);
-//     // medium_int y;
-//     // readVar(bb, &y);
-//     // DEBUG("value of bb = %d", y.medIntToInt());
-
-//     // MyType arr1 = createArr(INT, 5);
-//     // arr1.print();
-//     // int arr1_val[] = {1, 2, -3, 4, -5};
-//     // assignArr(arr1, arr1_val);
-//     // int arr1_val_read[5];
-//     // readArr(arr1, arr1_val_read);
-//     // for (size_t i = 0; i < 5; i++) {
-//     //     DEBUG("arr_val_read[%zu] = %d", i, arr1_val_read[i]);
-//     // }
-//     // assignArr(arr1, 0, -6);
-//     // assignArr(arr1, 1, -7);
-//     // assignArr(arr1, 2, -8);
-//     // assignArr(arr1, 3, -9);
-//     // assignArr(arr1, 4, 25);
-//     // readArr(arr1, arr1_val_read);
-//     // for (size_t i = 0; i < 5; i++) {
-//     //     DEBUG("arr_val_read[%zu] = %d", i, arr1_val_read[i]);
-//     // }
-//     // int v;
-//     // readArr(arr1, 0, &v);
-//     // DEBUG("%d", v);
-//     // readArr(arr1, 1, &v);
-//     // DEBUG("%d", v);
-//     // readArr(arr1, 2, &v);
-//     // DEBUG("%d", v);
-//     // readArr(arr1, 3, &v);
-//     // DEBUG("%d", v);
-//     // readArr(arr1, 4, &v);
-//     // DEBUG("%d", v);
-
-//     // MyType arr = createArr(MEDIUM_INT, 5);
-//     // arr.print();
-//     // medium_int arr_val[] = {medium_int(1), medium_int(2), medium_int(-3), medium_int(4), medium_int(-5)};
-//     // assignArr(arr, arr_val);
-//     // medium_int arr_val_read[5];
-//     // readArr(arr, arr_val_read);
-//     // for (size_t i = 0; i < 5; i++) {
-//     //     DEBUG("arr_val_read[%zu] = %d", i, arr_val_read[i].medIntToInt());
-//     // }
-//     // printf("\n");
-//     // assignArr(arr, 0, medium_int(-6));
-//     // assignArr(arr, 1, medium_int(7));
-//     // assignArr(arr, 2, medium_int(-8));
-//     // assignArr(arr, 3, medium_int(9));
-//     // assignArr(arr, 4, medium_int(25));
-//     // readArr(arr, arr_val_read);
-//     // for (size_t i = 0; i < 5; i++) {
-//     //     DEBUG("arr_val_read[%zu] = %d", i, arr_val_read[i].medIntToInt());
-//     // }
-//     // medium_int v;
-//     // readArr(arr, 0, &v);
-//     // DEBUG("%d", v.medIntToInt());
-//     // readArr(arr, 1, &v);
-//     // DEBUG("%d", v.medIntToInt());
-//     // readArr(arr, 2, &v);
-//     // DEBUG("%d", v.medIntToInt());
-//     // readArr(arr, 3, &v);
-//     // DEBUG("%d", v.medIntToInt());
-//     // readArr(arr, 4, &v);
-//     // DEBUG("%d", v.medIntToInt());
-
-//     // MyType arr2 = createArr(INT, 5);
-//     // arr2.print();
-//     // int arr2_val[] = {1, 2, -3, 4, -5};
-//     // assignArr(arr2, arr2_val);
-//     // int arr2_val_read[5];
-//     // readArr(arr2, arr2_val_read);
-//     // for (size_t i = 0; i < 5; i++) {
-//     //     DEBUG("arr_val_read[%zu] = %d", i, arr2_val_read[i]);
-//     // }
-//     //     assignArr(arr2, 0, -6);
-//     //     assignArr(arr2, 1, -7);
-//     //     assignArr(arr2, 2, -8);
-//     //     assignArr(arr2, 3, -9);
-//     //     assignArr(arr2, 4, 25);
-//     //     readArr(arr2, arr2_val_read);
-//     //     // for (size_t i = 0; i < 5; i++) {
-//     //     //     DEBUG("arr_val_read[%zu] = %d", i, arr2_val_read[i]);
-//     //     // }
-
-//     //     freeElem(arr);
-
-//     // MyType arr3 = createArr(CHAR, 10);
-//     // char arr3_val[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'};
-//     // assignArr(arr3, arr3_val);
-//     // char arr3_val_read[10];
-//     // readArr(arr3, arr3_val_read);
-//     // for (size_t i = 0; i < 10; i++) {
-//     //     DEBUG("arr3_val_read[%zu] = %c", i, arr3_val_read[i]);
-//     // }
-//     // printf("\n");
-//     // assignArr(arr3, 0, 'f');
-//     // assignArr(arr3, 1, 'g');
-//     // assignArr(arr3, 2, 'h');
-//     // assignArr(arr3, 3, 'i');
-//     // assignArr(arr3, 4, 'j');
-//     // // readArr(arr3, arr3_val_read);
-//     // for (size_t i = 0; i < 5; i++) {
-//     //     char cc;
-//     //     readArr(arr3, i, &cc);
-//     //     DEBUG("arr3_val_read[%zu] = %c", i, cc);
-//     // }
-//     // char v;
-//     // readArr(arr3, 0, &v);
-//     // DEBUG("%c", v);
-//     // readArr(arr3, 1, &v);
-//     // DEBUG("%c", v);
-//     // readArr(arr3, 2, &v);
-//     // DEBUG("%c", v);
-//     // readArr(arr3, 3, &v);
-//     // DEBUG("%c", v);
-//     // readArr(arr3, 4, &v);
-//     // DEBUG("%c", v);
-
-//     // MyType arr = createArr(BOOLEAN, 40);
-//     // arr.print();
-//     // bool arr_val[40];
-//     // for (size_t i = 0; i < 40; i++) {
-//     //     arr_val[i] = i % 2;
-//     // }
-//     // assignArr(arr, arr_val);
-//     // bool arr_val_read[40];
-//     // readArr(arr, arr_val_read);
-//     // for (size_t i = 0; i < 40; i++) {
-//     //     DEBUG("arr_val_read[%zu] = %d", i, arr_val_read[i]);
-//     // }
-//     // printf("\n");
-//     // // for (size_t i = 0; i < 40; i++) {
-//     // //     assignArr(arr, i, !arr_val[i]);
-//     // // }
-//     // assignArr(arr, 0, false);
-//     // assignArr(arr, 1, false);
-//     // assignArr(arr, 2, false);
-//     // assignArr(arr, 3, false);
-//     // assignArr(arr, 35, false);
-//     // readArr(arr, arr_val_read);
-//     // for (size_t i = 0; i < 40; i++) {
-//     //     bool bb;
-//     //     readArr(arr, i, &bb);
-//     //     DEBUG("arr_val_read[%zu] = %d", i, bb);
-//     // }
-
-//     cleanExit();
-// }
+/*
+TODO:
+allocate extra mem 1.25 - done
+gc_active or not - done
+log colors
+*/
