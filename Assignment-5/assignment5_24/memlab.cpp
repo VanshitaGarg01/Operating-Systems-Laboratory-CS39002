@@ -89,7 +89,7 @@ struct Memory {
         pthread_mutex_init(&mutex, &attr);
 
         MEMORY("Memory segment created");
-        MEMORY("start address = %lu", (u_long)start);
+        MEMORY("start address = %p", start);
         MEMORY("size = %lu (in words)", size);
         return 0;
     }
@@ -112,7 +112,7 @@ struct Memory {
             p = p + (*p >> 1);
         }
         if (p < end) {
-            MEMORY("Found free block at %lu", (u_long)p);
+            MEMORY("Found free block at %p", p);
             return p;
         } else {
             MEMORY("No free block found");
@@ -143,12 +143,12 @@ struct Memory {
         if (profiler_active) {
             fprintf(fp, "%ld\n", size - totalFree);
         }
-        MEMORY("Allocated block at %lu for %lu word(s) of data", (u_long)p, sz - 2);
+        MEMORY("Allocated block at %p for %lu word(s) of data", p, sz - 2);
     }
 
     // Deallocates the memory block at address p and sets the appropriate headers and footers
     void freeBlock(int *p) {
-        MEMORY("Freeing block at %lu", (u_long)p);
+        MEMORY("Freeing block at %p", p);
         *p = *p & -2;  // clear allocated flag in header
         u_int curr_size = *p >> 1;
         *(p + curr_size - 1) = *(p + curr_size - 1) & -2;  // clear allocated flag in footer
@@ -158,7 +158,7 @@ struct Memory {
 
         int *next = p + curr_size;                // find next block
         if ((next != end) && (*next & 1) == 0) {  // if next block is free
-            MEMORY("Coalescing with next block at %lu", (u_long)next);
+            MEMORY("Coalescing with next block at %p", next);
             u_int next_size = *next >> 1;
             *p = (curr_size + next_size) << 1;                                // merge with next block
             *(p + curr_size + next_size - 1) = (curr_size + next_size) << 1;  // set length in footer
@@ -168,7 +168,7 @@ struct Memory {
 
         if ((p != start) && (*(p - 1) & 1) == 0) {  // if previous block is free
             u_int prev_size = *(p - 1) >> 1;
-            MEMORY("Coalescing with previous block at %lu", (u_long)(p - prev_size));
+            MEMORY("Coalescing with previous block at %p", (p - prev_size));
             *(p - prev_size) = (prev_size + curr_size) << 1;      // set length in header of prev
             *(p + curr_size - 1) = (prev_size + curr_size) << 1;  // set length in footer
             numFreeBlocks--;
@@ -450,7 +450,7 @@ void gcRun() {
     }
     // Check if compaction needs to be done
     double ratio = (double)mem->totalFree / (double)(mem->currMaxFree + 1);
-    GC("Ratio (Total Free / Largest Free) = %f", ratio);
+    GC("Ratio (Total Free/Largest Free) = %f", ratio);
     if (ratio >= COMPACTION_RATIO_THRESHOLD) {
         GC("Ratio more than compaction ratio threshold");
         compactMemory();
