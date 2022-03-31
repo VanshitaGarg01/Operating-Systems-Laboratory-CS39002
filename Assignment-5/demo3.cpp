@@ -1,9 +1,13 @@
+/*
+    Demonstrates the compaction scheme of using the ratio totalFree/currMaxFree
+*/
+
 #include "memlab.h"
 
 using namespace std;
 
 int main() {
-    createMem(400, false);
+    createMem(400, true);
     initScope();
     MyType v1 = createVar(INT);
     MyType arr1 = createArr(INT, 10);

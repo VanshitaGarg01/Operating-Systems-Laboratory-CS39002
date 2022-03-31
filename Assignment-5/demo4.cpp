@@ -1,9 +1,13 @@
+/*
+    Demonstrates compaction occurring when a fre memory block cannot be found in the first try
+*/
+
 #include "memlab.h"
 
 using namespace std;
 
 int main() {
-    createMem(400, false);
+    createMem(400, true);
     initScope();
     MyType v1 = createVar(INT);
     MyType arr1 = createArr(INT, 10);
@@ -28,7 +32,7 @@ int main() {
     freeElem(v5);
     freeElem(arr6);
     freeElem(arr7);
-    MyType l = createArr(INT, 40);
+    MyType arr8 = createArr(INT, 40);
     endScope();
     cleanExit();
 }

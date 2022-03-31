@@ -1,3 +1,10 @@
+/*
+    The main function takes 250 MB memory. Then it calls 10 functions with 
+    two parameters x and y (x and y same data type). Each function creates 
+    and populates an array of 50000 elements of the same data type with random data, 
+    destroys the array and returns
+*/
+
 #include "memlab.h"
 
 using namespace std;
@@ -11,7 +18,6 @@ void func1(MyType x, MyType y) {  // INT
         int sign = i % 2 == 0 ? 1 : -1;
         assignArr(arr, i, sign * rand());
     }
-    // freeElem(arr);
     endScope();
     gcActivate();
 }
@@ -23,7 +29,6 @@ void func2(MyType x, MyType y) {  // MEDIUM INT
         int sign = i % 2 == 0 ? 1 : -1;
         assignArr(arr, i, medium_int(sign * (rand() % (1 << 23))));
     }
-    // freeElem(arr);
     endScope();
     gcActivate();
 }
@@ -34,7 +39,6 @@ void func3(MyType x, MyType y) {  // CHAR
     for (int i = 0; i < ARR_SIZE; i++) {
         assignArr(arr, i, (char)('a' + (rand() % 26)));
     }
-    // freeElem(arr);
     endScope();
     gcActivate();
 }
@@ -45,7 +49,6 @@ void func4(MyType x, MyType y) {  // BOOL
     for (int i = 0; i < ARR_SIZE; i++) {
         assignArr(arr, i, (bool)(rand() % 2));
     }
-    // freeElem(arr);
     endScope();
     gcActivate();
 }
@@ -57,7 +60,6 @@ void func5(MyType x, MyType y) {  // INT
         int sign = i % 2 == 0 ? 1 : -1;
         assignArr(arr, i, sign * rand());
     }
-    // freeElem(arr);
     endScope();
     gcActivate();
 }
@@ -69,7 +71,6 @@ void func6(MyType x, MyType y) {  // MEDIUM INT
         int sign = i % 2 == 0 ? 1 : -1;
         assignArr(arr, i, medium_int(sign * (rand() % (1 << 23))));
     }
-    // freeElem(arr);
     endScope();
     gcActivate();
 }
@@ -80,7 +81,6 @@ void func7(MyType x, MyType y) {  // CHAR
     for (int i = 0; i < ARR_SIZE; i++) {
         assignArr(arr, i, (char)('a' + (rand() % 26)));
     }
-    // freeElem(arr);
     endScope();
     gcActivate();
 }
@@ -91,7 +91,6 @@ void func8(MyType x, MyType y) {  // BOOL
     for (int i = 0; i < ARR_SIZE; i++) {
         assignArr(arr, i, (bool)(rand() % 2));
     }
-    // freeElem(arr);
     endScope();
     gcActivate();
 }
@@ -103,7 +102,6 @@ void func9(MyType x, MyType y) {  // INT
         int sign = i % 2 == 0 ? 1 : -1;
         assignArr(arr, i, sign * rand());
     }
-    // freeElem(arr);
     endScope();
     gcActivate();
 }
@@ -114,7 +112,6 @@ void func10(MyType x, MyType y) {  // CHAR
     for (int i = 0; i < ARR_SIZE; i++) {
         assignArr(arr, i, (char)('a' + (rand() % 26)));
     }
-    // freeElem(arr);
     endScope();
     gcActivate();
 }

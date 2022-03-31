@@ -1,3 +1,9 @@
+/*
+    Implements a fibonacci function using memory management. The main takes a parameter k,
+    and passes it to a function fibonacciProduct which calls the fibonacci to populate an array
+    of the first-k fibonacci numbers, computes its product and returns the product.
+*/
+
 #include "memlab.h"
 
 using namespace std;

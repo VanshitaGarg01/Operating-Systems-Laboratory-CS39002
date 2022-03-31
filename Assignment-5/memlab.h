@@ -28,10 +28,10 @@ enum DataType {
 inline int getSize(DataType data_type) {
     if (data_type == INT) {
         return 4;
-    } else if (data_type == CHAR) {
-        return 1;
     } else if (data_type == MEDIUM_INT) {
         return 3;
+    } else if (data_type == CHAR) {
+        return 1;
     } else if (data_type == BOOLEAN) {
         return 1;
     } else {
@@ -45,7 +45,7 @@ inline string getDataTypeStr(DataType data_type) {
     } else if (data_type == CHAR) {
         return "char";
     } else if (data_type == MEDIUM_INT) {
-        return "medium int";
+        return "medium_int";
     } else if (data_type == BOOLEAN) {
         return "boolean";
     } else {
