@@ -1,5 +1,4 @@
 import matplotlib.pyplot as plt
-import pandas as pd
 import numpy as np
 
 # max_memory = 250 * 1024 * 1024
@@ -53,7 +52,7 @@ print('Non-GC: mean = {}, std_dev = {}, max = {}'.format(non_gc_avg,
 plt.subplots_adjust(left=0.15)
 plt.plot(gc_data, 'ro-', label='With GC', linestyle='-')
 plt.xlabel('Time')
-plt.ylabel('Memory Usage')
+plt.ylabel('Memory Usage (in units of 4 bytes)')
 plt.plot(non_gc_data, 'bx-', label='Without GC', linestyle=':')
 # plt.axhline(y=max_memory, color='g', linestyle='-', label='Max Memory')
 plt.legend()

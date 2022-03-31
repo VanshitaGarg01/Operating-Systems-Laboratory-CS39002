@@ -42,23 +42,21 @@ bool gc_active;
 bool profiler_active;
 FILE *fp;
 
-#define LOCK(mutex_p)                                                            \
-    do {                                                                         \
-        int ret = pthread_mutex_lock(mutex_p);                                   \
-        if (ret != 0) {                                                          \
-            ERROR("%d: pthread_mutex_lock failed: %s", __LINE__, strerror(ret)); \
-            exit(1);                                                             \
-        }                                                                        \
-    } while (0)
+void LOCK(pthread_mutex_t *mutex) {
+    int status = pthread_mutex_lock(mutex);
+    if (status != 0) {
+        ERROR("pthread_mutex_lock failed: %s\n", strerror(status));
+        exit(1);
+    }
+}
 
-#define UNLOCK(mutex_p)                                                            \
-    do {                                                                           \
-        int ret = pthread_mutex_unlock(mutex_p);                                   \
-        if (ret != 0) {                                                            \
-            ERROR("%d: pthread_mutex_unlock failed: %s", __LINE__, strerror(ret)); \
-            exit(1);                                                               \
-        }                                                                          \
-    } while (0)
+void UNLOCK(pthread_mutex_t *mutex) {
+    int status = pthread_mutex_unlock(mutex);
+    if (status != 0) {
+        ERROR("pthread_mutex_unlock failed: %s\n", strerror(status));
+        exit(1);
+    }
+}
 
 // Reference: https://web2.qatar.cmu.edu/~msakr/15213-f09/lectures/class19.pdf
 struct Memory {
@@ -96,18 +94,21 @@ struct Memory {
         return 0;
     }
 
+    // Absolute address to offset
     int getOffset(int *p) {
         return (int)(p - start);
     }
 
+    // Offset to absolute address
     int *getAddr(int offset) {
         return (start + offset);
     }
 
+    // Finds a free block of memory for sz words
     int *findFreeBlock(size_t sz) {  // sz is the size required for the data (in words)
         MEMORY("Finding free block for %lu word(s) of data", sz);
         int *p = start;
-        while ((p < end) && ((*p & 1) || ((size_t)(*p >> 1) < sz + 2))) {
+        while ((p < end) && ((*p & 1) || ((size_t)(*p >> 1) < sz + 2))) {  // keep on iterating till a suitable block is found
             p = p + (*p >> 1);
         }
         if (p < end) {
@@ -119,6 +120,7 @@ struct Memory {
         }
     }
 
+    // Allocates memory for sz words at address p and sets the appropriate headers and footers
     void allocateBlock(int *p, size_t sz) {  // sz is the size required for the data (in words)
         sz += 2;
         u_int old_size = *p >> 1;       // mask out low bit
@@ -144,6 +146,7 @@ struct Memory {
         MEMORY("Allocated block at %lu for %lu word(s) of data", (u_long)p, sz - 2);
     }
 
+    // Deallocates the memory block at address p and sets the appropriate headers and footers
     void freeBlock(int *p) {
         MEMORY("Freeing block at %lu", (u_long)p);
         *p = *p & -2;  // clear allocated flag in header
@@ -179,8 +182,8 @@ struct Memory {
         }
     }
 
+    // Display the current memory blocks
     void displayMem() {
-// TODO: add memory color
 #ifdef LOGS
         int *p = start;
         printf("   Start      End    Allocated\n");
@@ -193,10 +196,12 @@ struct Memory {
     }
 };
 
+// Counter to index in page table array
 u_int counterToIdx(u_int p) {
     return (p >> 2);
 }
 
+// Index in page table array to counter
 u_int idxToCounter(u_int p) {
     return (p << 2);
 }
@@ -238,6 +243,7 @@ struct PageTable {
         PAGE_TABLE("Page table initialized");
     }
 
+    // Adds a new entry to the page table
     int insert(u_int addr) {
         if (size == MAX_PT_ENTRIES) {
             PAGE_TABLE("Page table is full, insert failed");
@@ -259,6 +265,7 @@ struct PageTable {
         return idx;
     }
 
+    // Removes an entry from the page table
     int remove(u_int idx) {
         if (size == 0 || !pt[idx].valid) {
             PAGE_TABLE("Page table is empty or entry index %d is invalid, remove failed", idx);
@@ -275,13 +282,16 @@ struct PageTable {
         return 0;
     }
 
+    // Display the contents of the page table
     void print() {
         printf("\nPage Table:\n");
         printf("Head: %d, Tail: %d, Size: %lu\n", head, tail, size);
         printf("Index     Entry  Valid  Marked\n");
         for (size_t i = 0; i < MAX_PT_ENTRIES; i++) {
-            printf("%3ld ", i);
-            pt[i].print();
+            if (pt[i].valid) {
+                printf("%3ld ", i);
+                pt[i].print();
+            }
         }
     }
 };
@@ -340,11 +350,11 @@ sem_t gc_sem;
 
 void freeElem(u_int idx) {
     GC("freeElem called for array index %d in page table", idx);
-    int ret = page_table->remove(idx);
+    int ret = page_table->remove(idx);  // Remove the entry from the page table
     if (ret == -1) {
         throw runtime_error("freeElem: Invalid Index");
     }
-    mem->freeBlock(mem->getAddr(page_table->pt[idx].addr));
+    mem->freeBlock(mem->getAddr(page_table->pt[idx].addr));  // Free the memory block
 }
 
 void freeElem(MyType &var) {
@@ -358,6 +368,7 @@ void freeElem(MyType &var) {
     UNLOCK(&mem->mutex);
 }
 
+// Calculates new offsets that will be used for compaction
 void calcNewOffsets() {
     int *p = mem->start;
     u_int free = 0;
@@ -372,6 +383,7 @@ void calcNewOffsets() {
     GC("Completed calculating new offsets for blocks for compaction");
 }
 
+// Updates the page table entries with the new offsets for compaction
 void updatePageTable() {
     for (size_t i = 0; i < MAX_PT_ENTRIES; i++) {
         if (page_table->pt[i].valid) {
@@ -393,7 +405,7 @@ void compactMemory() {
     int *p = mem->start;
     int *next = p + (*p >> 1);
     while (next < mem->end) {
-        if ((*p & 1) == 0 && (*next & 1) == 1) {
+        if ((*p & 1) == 0 && (*next & 1) == 1) {  // If curent block is free and next block is allocated, swap them
             int curr_size = *p >> 1;
             int next_size = *next >> 1;
             memcpy(p, next, next_size << 2);
@@ -401,7 +413,7 @@ void compactMemory() {
             *p = curr_size << 1;
             *(p + curr_size - 1) = curr_size << 1;
             next = p + curr_size;
-            if (next < mem->end && (*next & 1) == 0) {
+            if (next < mem->end && (*next & 1) == 0) {  // Coalesce if next block is free
                 curr_size = curr_size + (*next >> 1);
                 *p = curr_size << 1;
                 *(p + curr_size - 1) = curr_size << 1;
@@ -414,7 +426,7 @@ void compactMemory() {
     }
     GC("Blocks rearranged after compaction");
     p = mem->start;
-    while (p < mem->end) {
+    while (p < mem->end) {  // Update block footers
         *(p + (*p >> 1) - 1) = *p;
         p = p + (*p >> 1);
     }
@@ -430,11 +442,13 @@ void gcRun() {
     LOCK(&mem->mutex);
     LOCK(&page_table->mutex);
     GC("gcRun called");
+    // Perform mark and sweep
     for (size_t i = 0; i < MAX_PT_ENTRIES; i++) {
         if (page_table->pt[i].valid && !page_table->pt[i].marked) {
             freeElem(i);
         }
     }
+    // Check if compaction needs to be done
     double ratio = (double)mem->totalFree / (double)(mem->currMaxFree + 1);
     GC("Ratio (Total Free / Largest Free) = %f", ratio);
     if (ratio >= COMPACTION_RATIO_THRESHOLD) {
@@ -453,11 +467,13 @@ void gcActivate() {
     }
 }
 
+// Signal handler for SIGUSR1
 void handleSIGUSR1(int sig) {
     GC("SIGUSR1 received");
     gcRun();
 }
 
+// The function that is run by the garbage collection thread
 void *gcThread(void *arg) {
     GC("Garbage collection thread created");
     signal(SIGUSR1, handleSIGUSR1);
@@ -467,6 +483,7 @@ void *gcThread(void *arg) {
     sigemptyset(&mask);
     sigaddset(&mask, SIGUSR1);
     pthread_sigmask(SIG_UNBLOCK, &mask, NULL);
+    // SIGUSR1 is blocked while gcRun is executing, and unblocked when it is over
     while (1) {
         pthread_testcancel();
         usleep(GC_SLEEP_US);
@@ -478,6 +495,7 @@ void *gcThread(void *arg) {
     }
 }
 
+// Indicates that a new scope has been entered
 void initScope() {
     LIBRARY("initScope called");
     if (gc_active) {
@@ -487,6 +505,7 @@ void initScope() {
     }
 }
 
+// Indicates that the current scope has ended
 void endScope() {
     LIBRARY("endScope called");
     if (gc_active) {
@@ -498,7 +517,7 @@ void endScope() {
             }
             if (ind >= 0) {
                 LOCK(&page_table->mutex);
-                page_table->pt[counterToIdx(ind)].marked = 0;
+                page_table->pt[counterToIdx(ind)].marked = 0;  // Set mark bit to 0
                 PAGE_TABLE("Unmarked entry in page table for variable with counter = %d", ind);
                 UNLOCK(&page_table->mutex);
             }
@@ -506,6 +525,7 @@ void endScope() {
     }
 }
 
+// Function to exit by freeing up all resources
 void cleanExit() {
     LIBRARY("cleanExit called");
     LOCK(&mem->mutex);
@@ -516,16 +536,17 @@ void cleanExit() {
     sem_destroy(&gc_sem);
     pthread_mutex_destroy(&mem->mutex);
     pthread_mutex_destroy(&page_table->mutex);
+    free(var_stack);
+    STACK("Freed memory allotted to stack");
+    free(page_table);
+    PAGE_TABLE("Freed memory allotted to page table");
     free(mem->start);
     free(mem);
     MEMORY("Freed main memory");
-    free(page_table);
-    PAGE_TABLE("Freed memory allotted to page table");
-    free(var_stack);
-    STACK("Freed memory allotted to stack");
     exit(0);
 }
 
+// Get word location for arrays using index in the array
 int idxToWord(DataType type, int idx) {
     int cnt;
     if (type == BOOLEAN) {
@@ -537,6 +558,7 @@ int idxToWord(DataType type, int idx) {
     return word;
 }
 
+// Get offset in a word for arrays using index in the array
 int idxToOffset(DataType type, int idx) {
     int cnt;
     if (type == BOOLEAN) {
@@ -566,17 +588,17 @@ void createMem(size_t bytes, bool is_gc_active, bool is_profiler_active, string 
     var_stack = (Stack *)malloc(sizeof(Stack));
     var_stack->init();
 
-    gc_active = is_gc_active;
+    gc_active = is_gc_active;  // To switch on/off garbage collection
     profiler_active = is_profiler_active;
 
-    if (profiler_active) {
+    if (profiler_active) {  // For checking impact of garbage collection
         fp = fopen(file.c_str(), "w");
     }
 
     sem_init(&gc_sem, 0, 0);
     if (gc_active) {
         pthread_create(&gc_tid, NULL, gcThread, NULL);
-        sem_wait(&gc_sem);
+        sem_wait(&gc_sem);  // Wait till the signal handler is installed in the garbage collection thread
     }
 }
 
@@ -615,6 +637,7 @@ MyType createVar(DataType type) {
     return create(PRIMITIVE, type, 1, 1);
 }
 
+// Type checking
 void validate(MyType &var, VarType type, DataType d_type, bool index = false) {
     string vt = (type == PRIMITIVE ? "Var" : "Arr");
     string s = "";
@@ -638,6 +661,7 @@ void validate(MyType &var, VarType type, DataType d_type, bool index = false) {
     }
 }
 
+// Assign an int
 void assignVar(MyType &var, int val) {
     LIBRARY("assignVar (int) called for variable with counter = %d and value = %d", var.ind, val);
     validate(var, PRIMITIVE, INT);
@@ -649,6 +673,7 @@ void assignVar(MyType &var, int val) {
     UNLOCK(&mem->mutex);
 }
 
+// Assign a medium int
 void assignVar(MyType &var, medium_int val) {
     LIBRARY("assignVar (medium int) called for variable with counter = %d and value = %d", var.ind, val.medIntToInt());
     validate(var, PRIMITIVE, MEDIUM_INT);
@@ -661,6 +686,7 @@ void assignVar(MyType &var, medium_int val) {
     UNLOCK(&mem->mutex);
 }
 
+// Assign a char
 void assignVar(MyType &var, char val) {
     LIBRARY("assignVar (char) called for variable with counter = %d and value = %c", var.ind, val);
     validate(var, PRIMITIVE, CHAR);
@@ -673,6 +699,7 @@ void assignVar(MyType &var, char val) {
     UNLOCK(&mem->mutex);
 }
 
+// Assign a boolean
 void assignVar(MyType &var, bool val) {
     LIBRARY("assignVar (bool) called for variable with counter = %d and value = %d", var.ind, val);
     validate(var, PRIMITIVE, BOOLEAN);
@@ -685,6 +712,7 @@ void assignVar(MyType &var, bool val) {
     UNLOCK(&mem->mutex);
 }
 
+// Reads the value of a variable and stores it in the memory location pointed to by ptr
 void readVar(MyType &var, void *ptr) {
     LIBRARY("readVar called for variable with counter = %d", var.ind);
     if (var.var_type != PRIMITIVE) {
@@ -716,16 +744,17 @@ MyType createArr(DataType type, int len) {
     }
     u_int size_req;
     if (type == INT || type == MEDIUM_INT) {
-        size_req = len;
+        size_req = len;  // 1 int/medium_int in 1 word
     } else if (type == CHAR) {
-        size_req = (len + 3) >> 2;
+        size_req = (len + 3) >> 2;  // 4 chars in one word
     } else if (type == BOOLEAN) {
-        size_req = (len + 31) >> 5;
+        size_req = (len + 31) >> 5;  // 32 booleans in one word
     }
     WORD_ALIGN("Creating array of type = %s, len = %d, memory required = %d words", getDataTypeStr(type).c_str(), len, size_req);
     return create(ARRAY, type, len, size_req);
 }
 
+// Assign an entire array of ints
 void assignArr(MyType &arr, int val[]) {
     LIBRARY("assignArr (int) called for array with counter = %d", arr.ind);
     validate(arr, ARRAY, INT);
@@ -739,6 +768,7 @@ void assignArr(MyType &arr, int val[]) {
     UNLOCK(&mem->mutex);
 }
 
+// Assign an entire array of medium ints
 void assignArr(MyType &arr, medium_int val[]) {
     LIBRARY("assignArr (medium int) called for array with counter = %d", arr.ind);
     validate(arr, ARRAY, MEDIUM_INT);
@@ -753,6 +783,7 @@ void assignArr(MyType &arr, medium_int val[]) {
     UNLOCK(&mem->mutex);
 }
 
+// Assign an entire array of chars
 void assignArr(MyType &arr, char val[]) {
     LIBRARY("assignArr (char) called for array with counter = %d", arr.ind);
     validate(arr, ARRAY, CHAR);
@@ -771,6 +802,7 @@ void assignArr(MyType &arr, char val[]) {
     UNLOCK(&mem->mutex);
 }
 
+// Assign an entire array of booleans
 void assignArr(MyType &arr, bool val[]) {
     LIBRARY("assignArr (bool) called for array with counter = %d", arr.ind);
     validate(arr, ARRAY, BOOLEAN);
@@ -789,6 +821,7 @@ void assignArr(MyType &arr, bool val[]) {
     UNLOCK(&mem->mutex);
 }
 
+// Assign an element at a index in an array of ints
 void assignArr(MyType &arr, int index, int val) {
     LIBRARY("assignArr (int[], index) called for array with counter = %d at index = %d and value = %d", arr.ind, index, val);
     validate(arr, ARRAY, INT, true);
@@ -803,6 +836,7 @@ void assignArr(MyType &arr, int index, int val) {
     UNLOCK(&mem->mutex);
 }
 
+// Assign an element at a index in an array of medium ints
 void assignArr(MyType &arr, int index, medium_int val) {
     LIBRARY("assignArr (medium int[], index) called for array with counter = %d at index = %d and value = %d", arr.ind, index, val.medIntToInt());
     validate(arr, ARRAY, MEDIUM_INT, true);
@@ -818,6 +852,7 @@ void assignArr(MyType &arr, int index, medium_int val) {
     UNLOCK(&mem->mutex);
 }
 
+// Assign an element at a index in an array of chars
 void assignArr(MyType &arr, int index, char val) {
     LIBRARY("assignArr (char[], index) called for array with counter = %d at index = %d and value = %c", arr.ind, index, val);
     validate(arr, ARRAY, CHAR, true);
@@ -839,6 +874,7 @@ void assignArr(MyType &arr, int index, char val) {
     UNLOCK(&mem->mutex);
 }
 
+// Assign an element at a index in an array of booleans
 void assignArr(MyType &arr, int index, bool val) {
     LIBRARY("assignArr (bool[], index) called for array with counter = %d at index = %d and value = %d", arr.ind, index, val);
     validate(arr, ARRAY, BOOLEAN, true);
@@ -860,6 +896,7 @@ void assignArr(MyType &arr, int index, bool val) {
     UNLOCK(&mem->mutex);
 }
 
+// Reads the entire array and stores it in the memory location pointed to by ptr
 void readArr(MyType &arr, void *ptr) {
     LIBRARY("readArr called for array with counter = %d", arr.ind);
     if (arr.var_type != ARRAY) {
@@ -911,6 +948,7 @@ void readArr(MyType &arr, void *ptr) {
     UNLOCK(&mem->mutex);
 }
 
+// Reads the value of a single array element and stores it in the memory location pointed to by ptr
 void readArr(MyType &arr, int index, void *ptr) {
     LIBRARY("readArr (index) called for array with counter = %d at index = %d", arr.ind, index);
     if (arr.var_type != ARRAY) {
@@ -949,10 +987,3 @@ void readArr(MyType &arr, int index, void *ptr) {
     }
     UNLOCK(&mem->mutex);
 }
-
-/*
-TODO:
-allocate extra mem 1.25 - done
-gc_active or not - done
-log colors
-*/
