@@ -1,7 +1,7 @@
 /*
-    The main function takes 250 MB memory. Then it calls 10 functions with 
-    two parameters x and y (x and y same data type). Each function creates 
-    and populates an array of 50000 elements of the same data type with random data, 
+    The main function takes 250 MB memory. Then it calls 10 functions with
+    two parameters x and y (x and y same data type). Each function creates
+    and populates an array of 50000 elements of the same data type with random data,
     destroys the array and returns
 */
 

@@ -53,6 +53,7 @@ inline string getDataTypeStr(DataType data_type) {
     }
 }
 
+// A wrapper for the medium int data type
 class medium_int {
    public:
     char data[3];
@@ -134,8 +135,6 @@ void gcActivate();
 
 void initScope();
 void endScope();
-
-void displayMem();
 
 void cleanExit();
 
